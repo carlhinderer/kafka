@@ -1,0 +1,162 @@
+-----------------------------------------------------------------------
+|  CHAPTER 2 - APACHE KAFKA                                           |
+-----------------------------------------------------------------------
+
+- Apache Kafka
+
+    - Kafka is an event-streaming platform.  It is also an entire ecosystem of technologies
+        designed to assist in the construction of complete event-driven systems.  It is the 
+        leader in the event-streaming space.
+
+
+    - Kafka is written in Java, meaning it can run on most configurations.
+
+
+
+- History of Kafka
+
+    - Jay Kreps started the Kafka project at LinkedIn, and it was open sourced in 2011.
+        He named it Kafka since it is "optimized for writing".  It became a top-level
+        Apache project in 2012.
+
+
+    - It was born from the need to track large volumes of site events (page views, clicks, etc)
+        and for log aggregation.  It replaced the approach of using lots of disparate pipelines.
+
+
+    - At LinkedIn, the number of events being processed daily was:
+
+        2011 - 1B
+        2012 - 20B
+        2013 - 200B
+        2015 - 1T
+        2019 - 7T
+
+
+
+- Present-Day Kafka
+
+    - Companies using Kafka include:
+
+        - Yahoo (20 GB per second of real-time analytics)
+        - Twitter
+        - Netflix (700B events per day)
+        - Tumblr
+        - Square
+        - Pinterest (800B events per day)
+        - Uber (1T events per day)
+        - 1/3 of Fortune 500 companies
+
+
+    - Kafka integrates with:
+
+        - Apache Spark, Storm, Flink, and Hadoop
+        - LogStash and the ELK stack
+        - Major SQL and NoSQL databases
+        - 100+ off-the-shelf connectors
+
+
+
+- Uses of Kafka
+
+    - Publish-Subscribe
+
+        - In this case, Kafka competes with traditional message brokers and service buses.
+
+        - Kafka lacks some of the features of the traditional middleware platforms, like
+            message deletion, priority levels, flow control, distributed transactions, and
+            dead letter queues.  This is since they are related to traditional messaging
+            paradigms.
+
+
+                                    / Consumer A
+            Producer  -->  Topic  --
+                                    \ Consumer B
+
+
+    - Log Aggregation
+
+        - Kafka can act as a buffer for high rate of log events, offering an intermediate,
+            durable datastore.
+
+
+            App X Logs  -->  Source  --\
+
+            App Y Logs  -->  Source  -->  TOPIC  -->  Sink  --> Long-Term Log Persistance
+
+            App Z Logs  -->  Source  --/
+
+
+
+    - Log Shipping
+
+        - This is real-time copying of journal entries from a master data-centric system to
+            one or more read-only replicas.
+
+
+        - State changes are passed from the master to the replicas to accurately mimic the
+            state of the master, albeit with some lag.
+
+              
+                                             /  Replica
+            Primary  -->  Log  -->  TOPIC  --
+                                             \  Replica
+
+
+    - SEDA Pipelines
+
+        - Staged Event-Driven Architecture is the application of pipelining to event-oriented
+            data.  Events flow through a set of processing stages linked by topics, each one
+            performing some transformation.
+
+
+        - Stages may consume events from multiple topics simultaneously, joining data from 
+            different streams.
+
+
+        - Found in data warehousing, data lakes, reporting, analytics, and other BI systems.
+
+
+                                                Stage B  -->  TOPIC  -->  Stage D 
+                                              /                                    \
+            TOPIC  ->  Stage A  -->  TOPIC  --  ---------->  Stage C  --------->  TOPIC
+
+
+    - CEP
+
+        - Complex Event Processing extracts meaningful information and patterns from a stream
+            of discrete events.
+
+        - CEP processors tend to be stateful, as they must be able to efficiently recall past
+            events to identify patterns.
+
+        - CEP is heavily employed in algorithmic stock trading, security thread analysis, 
+            real-time fraud detection, and control systems.
+
+
+            TOPIC  -- Events -->  
+            TOPIC  -- Events -->   CEP ENGINE  -- Detected outcome  -->  TOPIC
+            TOPIC  -- Events -->
+
+
+    - Event-Sourced CQRS
+
+        - Command-Query Responsibility Segregation separates actions that mutate state from 
+            actions that query state. 
+
+        - This adds complexity due to multiple datastores, but can create a highly performant
+            system.
+
+
+                                   Client
+                                   /      \
+                            Commands      Queries
+                                 /          \
+                            COMMAND        QUERY
+                            HANDLING       HANDLING
+                                |             |
+                             Write          Read
+                                |             |
+                                v             v
+                            MASTER            VIEW
+                            DATA  -> TOPIC -> PROJECTION
