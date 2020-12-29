@@ -1,0 +1,106 @@
+-----------------------------------------------------------------------
+|  CHAPTER 1 - EVENT STREAMING FUNDAMENTALS                           |
+-----------------------------------------------------------------------
+
+- The challenges of distributed systems
+
+    - Coupling
+
+        - The lower the coupling, the greater the evolvability of the system
+        - Asynchronous communication and messaging middleware help
+        - Transitive dependencies can still exist
+
+    - Resilience
+
+        - A 'network partition' separates the system from one or more clients
+        - Total failures = 'fail-stop'
+        - Partial failures
+        - Intermittent failures
+        - Byzantine failures
+
+    - Consistency
+
+        - A distributed system is a vasts state machine
+        - Consistency vs Availability
+        - CAP Theorem = Distributed systems must be tolerant of network partitions,
+                          so they have to give up either consistency or availability guarantees
+        - The stronger the consistency, the more synchronization required
+
+
+
+- Event-Driven Architecture
+
+    - EDA is a paradigm promoting the production, detection, consumption, and reaction to events.
+        An event is a significant change in state.
+
+
+    - Interested parties can be notified of an event by having the originating domain publish
+        a canonical depiction of the event to a well-known conduit - a message broker, ledger,
+        or shared database.
+
+
+    - An event-driven system consists of:
+
+        1. Emitters (aka producers or agents)
+        2. Consumers (aka subscribers or sinks)
+        3. Channels (aka brokers)
+
+
+    - We also use the term 'upstream' (elements prior to a given element in the relationship) and 
+        'downstream' (subsequent elements).  An emitter of an event is not aware of any of the
+        event's downstream consumers.
+
+
+    - Event notifications are immutable.
+
+
+
+- Coupling
+
+    - Traditional solutions in the absence of EDA:
+
+        1. Build a monolith
+        2. Integration (ie microservices)
+        3. Data decapsulation (reach over into each others' databases)
+        4. Shared datastore
+
+
+    - Emitters and consumers are coupled only to intermediate channels and event schemas.
+        This is the lowest degree of coupling of any practical system.
+
+
+    - For example, an e-commerce system might emit events for each product purchase.  Downstream,
+        a BI platform and an ERP platform each react to sales events.
+
+
+
+- Resilience
+
+    - If a producer goes down, none of the downstream components are affected.  They can still
+        keep acting as normal.
+
+
+    - If a consumer goes down, and the event channel is durable, the consumer can catch up once
+        it comes back up.
+
+
+    - The buffering capability of the event channel keeps producers from overwhelming consumers.
+
+
+
+- Consistency
+
+    - If there is a single writer, the events can always be replayed in the exact order in which
+        they were observed by the emitter.  This is known as 'sequential consistency'.
+
+
+    - Alternatively, events can be emitted in 'causal order', where events in any sequence are 
+        related among themselves, but unrelated to events in other sequences.  This is a slight
+        relaxation of sequential consistency.
+
+
+
+- Event Streaming
+
+    - An event stream is a durable, totally-ordered, unbounded sequence of immuatable data 
+        records, delivered at least once to its subscribers.
