@@ -142,3 +142,109 @@
 
       We can say that Received(R0) -> Received(R1).  However, this does not imply that 
         Sent(R0) -> Sent(R1).
+
+
+
+- Records
+
+    - A 'record' is the most elemental unit of persistence in Kafka.  In an EDA context, a
+        record corresponds to some event of interest.
+
+
+    - A record has the following attributes:
+
+        Key
+
+          A non-unique key, which acts as a classifier.  It is free-form - anything that can
+            be represented as a sequence of bytes can be a key.
+
+        Value
+
+          The value is the informational payload of a record.  It describes the event.
+
+        Headers
+
+          A set of free-form key-value pairs that can optionally annotate a record.
+
+        Partition Number
+
+          A zero-based index of the partition that the record appears in.  A record is always
+            tied to exactly one partition, but the partition doesn't need to be explicitly
+            stated when the record is published.
+
+        Offset
+
+          A 64-bit signed integer for locating a record within its partition.  Records are
+            stored sequentially.
+
+        Timestamp
+
+          A millisecond-precise timestamp of the record.  It can be set by either the producer
+            or broker.
+
+
+    - The 'key' attribute is not used like a primary key.  It is used as a non-unique classifier,
+        and Kafka hashes the keys to map records to paritions.
+        
+      The primary key of a record is its partition number and offset.
+
+
+
+- Partitions
+
+    - A 'partition' is a totally ordered, unbounded set of records.  Published records are 
+        appended to the head end of a partition.
+
+
+    - Because records are totally ordered within their partition, any pair of records in the same 
+       partition is bound by a predecessor-successor relationship. This relationship is implicitly 
+       assigned by the producer application. 
+
+      For any given producer instance, records will be written in the order they were emitted by the
+        application. If record P was published before Q, then P will precede Q in the partition.
+
+      Furthermore, they will be read in the same order by all consumers.  P will always be read before Q, 
+        for every possible consumer.  This ordering guarantee is vital when implementing event-driven
+        systems.
+
+
+    - Records published to one partition by the same producer are causally ordered.  There is no 
+        recognised causal ordering across producers.
+
+      So, in the absence of producer synchronization, causal order can only be achieved when a 
+        single producer emits records to the same partition.  Whether this matters depends on the
+        application.
+
+
+    - A record's offset uniquely identifies it in the partition.  This allows for fast, O(1) lookups.
+        The offset is a strictly-increasing integer, although there may be gaps in the numbers, so
+        we shouldn't try to guess what they will be.
+
+
+    - A partition looks like:
+
+            LOG END OFFSET     000015
+                               000014
+            HIGH WATER MARK    000013
+                               000012   key | value | timestamp | headers
+                               000011   key | value | timestamp | headers
+                               000010   key | value | timestamp | headers
+                               000009   key | value | timestamp | headers
+                               000008   key | value | timestamp | headers
+            LOW WATER MARK     000007   key | value | timestamp | headers
+                               000006
+                               000005
+
+
+                - The next record will be written at the LOG END OFFSET.
+                - The HIGH WATER MARK is aka the 'END OFFSET'.
+                - The LOW WATER MARK is aka the 'BEGINNING OFFSET'.
+                - Records below the LOW WATER MARK are truncated.
+
+                - The LOW WATER MARK is the first record that will be presented to a consumer.
+                    Due to bounded retention, this is not necessarily the first record that was
+                    published.
+
+                - Consumers are only allowed to read up to the HIGH WATER MARK.  This prevents 
+                    cosumers from reading unreplicated data that may be lost in the event of a
+                    leader failure.
