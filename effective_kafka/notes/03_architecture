@@ -1,0 +1,144 @@
+-----------------------------------------------------------------------
+|  CHAPTER 3 - ARCHITECTURE & CORE CONCEPTS                           |
+-----------------------------------------------------------------------
+
+- Architecture Overview
+
+    1. Broker nodes = responsible for I/O operations and durable persistence
+
+    2. ZooKeeper nodes = manages the cluster status, provides consistent state repository
+                           that can be shared by brokers
+
+    3. Producers = client applications that append records to topics
+
+    4. Consumers = client applications that read from topics
+
+
+
+- Broker Nodes
+
+    - Note that the terms 'Kafka server', 'Kafka broker', and 'Kafka node' are used 
+        interchangeably.
+
+
+    - A Kafka broker is a Java process that acts as part of a larger cluster.  The minimum
+        cluster size is 1.
+
+
+    - A broker fulfills its persistence obligations by hosting a set of append-only log files
+        that comprise the partitions hosted by the clusters.
+
+
+    - Each partition is mastered by exactly one broker - the partition 'leader'.  Partition data
+        is replicated to a set of 0 or more 'follower' brokers.  Collectively, the leader and
+        followers are referred to as 'replicas'.  A broker may be a leader for one partition and
+        a follower for others.
+
+
+    - Broker nodes are largely identical in every way.  Each node competes for mastership of a
+        partition on equal footing with its peers.  A single node is elected 'cluster controller',
+        which directs all nodes (including itself) to assume specific roles.  It is the controller's
+        resposibility to manage the states of partitions and replicas, and perform administrative
+        tasks like reassigning partitions among the broker nodes.
+
+
+
+- ZooKeeper Nodes
+
+    - The election of the cluster controller is performed by ZooKeeper.  ZooKeeper itself is
+        a cluster of cooperating processes called an 'ensemble'.  
+
+
+    - A ZooKeeper ensemble acts as a consistent and highly available config repository,
+        maintaining cluster metadata, leader-follower states, quotas, user information, access
+        control lists, and other housekeeping items.  Due to the underlying consensus protocol
+        used, the number of ZooKeeper nodes must be odd.
+
+
+    - ZooKeeper ensures that only one broker node will be assigned controller status, and if that
+        node fails of leaves the cluster, another broker node will take its place.
+
+
+
+- Producers
+
+    - A producer is a source of data in a Kafka cluster.  A producer communicates with a
+        cluster over a set of persistent TCP connections, with an individual connection
+        established with each broker.
+
+
+    - Producers can publish records to one or more Kafka topics, and any number of producers
+        can append records to the same topic.  Consumers cannot modify topics in any way.
+
+
+
+- Consumers
+
+    - A consumer is a client application that acts as a data sink, subscribing to streams of
+        records from one or more topics.
+
+
+    - Consumers are more complex than producers, since they have to coordinate among themselves
+        to balance the load of consuming records and track their progress through the stream.
+
+
+
+- Total and Partial Order
+
+    - A 'totally ordered set' is one where every element has a well-defined ordering 
+        relationship with every other element in the set.
+
+        1 -> 2 -> 3 -> 4 -> 5
+
+      We can remove elements from the set and re-add them, and we will always arrive at the
+        same sequence.
+
+
+    - An 'unordered set' has no implicit order.
+
+        [Sydney, New York, London]
+
+
+    - A 'partially ordered set' indicates that for certain pairs of elements in the set, one
+        of the pair precedes the other in the ordering.  However, not every pair of elements
+        needs to be comparable.
+
+      For example, in this set, a number must appear after its divisor.
+
+        [2, 3, 5, 7, 11, 4, 6, 9, 10, 8, 12]
+
+      Or for another example, if we have 2 alphabets, English {A, B, C, ..., Z} and 
+        Cyrillic {А, Б, В, ..., Я}, their union would be partially ordered if each letter
+        maintained relative order within its own alphabet.
+
+
+
+- Causal Order
+
+    - The notion of 'causal order' comes from modern distributed systems theory.  One
+        challenge of constructing such systems is that a message sent from one process to 
+        another can arrive 0 or more times at any time after they are sent.
+
+
+    - As a consequence, there is no agreeable notion of time among collaborating processes. If 
+        one process, such as a clock, sends a timestamped message to another process, there is no 
+        reliable way for a receiver to determine the time relative to the clock and synchronise the 
+        two processes. This is often cited as the sole reason that building distributed systems is 
+        hard.
+
+
+    - In the absence of a global clock, the relative timing of a pair of events may be
+        indistinguishable to an outside observer.  But, if they are causally related, they
+        become comparable, so we know their order.
+
+
+    - The original events themselves are not comparable, but the recorded observations of the 
+        events are.  The observations are events in their own right.
+
+
+    - For example, 2 samples of temperature readings R0 and R1 are taken at different sites.
+        They are communicated to a remote receiver and recorded in the order of arrival, forming
+        a causal relationship on the receiver.
+
+      We can say that Received(R0) -> Received(R1).  However, this does not imply that 
+        Sent(R0) -> Sent(R1).
