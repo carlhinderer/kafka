@@ -324,3 +324,67 @@
         its lease on the partition assignment.
 
       If it fails to read in the allowable deadline, its partitions will be reassigned.
+
+
+
+- Committing Offsets
+
+    - Consumers maintain an internal state with respect to their partition offsets. At some point, 
+        that state must be shared with Kafka, so that when a partition is reassigned, the new consumer 
+        can resume processing from where the outgoing consumer left off. 
+
+      Similarly, if the consumers were to disconnect, upon reconnection they would ideally skip over 
+        any records that have already been processed.
+
+
+    - Persisting the consumer state back to the Kafka cluster is called committing an offset. Typically, 
+        a consumer will read a record (or a batch of records) and commit the offset of the last record
+        plus one. 
+
+      If a new consumer takes over the topic, it will commence processing from the last committed offset, 
+        so the plus-one step is essential. (Otherwise, the last processed record would be handled a 
+        second time.)
+
+
+    - Controlling the point at which an offset is committed provides a lot of flexibility around
+        delivery guarantees.
+
+      For instance, we can shift from at-most-once to at-least-once delivery by moving the commit 
+        operation from before reading a record to after reading it.
+
+
+    - By default, a Kafka consumer will automatically commit offsets at least once every 5 seconds.
+        The lower bound can be set in the 'auto.commit.interval.ms' property.
+
+      To stop automatic commits, the 'enable.auto.commit' property can be set to false.
+
+
+    - Getting offset commits right can be tricky.  A committed offset implies that the record
+        below that offset and all prior records have been dealt with by the consumers.
+
+      When designing at-least-once applications, an offset should be committed only when the
+        application has dealt with the record in question.  This includes calling other APIs,
+        updating a DB, committing transactions, persisting the record's payload, or publishing
+        more records.  This is known as the 'poll-process loop'.
+
+
+
+- Free Consumers
+
+    - If a consumer does not have it's 'group.id' property set, it does not belong to a consumer
+        group, and is considered a 'free consumer'.  
+
+
+    - Free consumers don't subscribe to a topic, it manually assigns a set of topic-partitions
+        to itself.  They don't commit their offsets, and don't have automatic partition assignment,
+        rebalancing, heartbeats, or failure detection.
+
+
+    - Free consumers are used much less than consumer groups.  They make sense primarily in 2 use
+        cases:
+
+        1. An application requires full control of the partition assignment scheme.  This is rare
+             since it is very difficult to implement correctly.
+
+        2. A stateless or ephemeral consumer needs to monitor a topic.  For instance, it may just
+             be used to aid monitoring or debugging.  The Kafdrop tool uses this method.
