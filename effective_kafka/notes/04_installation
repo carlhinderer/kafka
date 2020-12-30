@@ -60,3 +60,22 @@
 
         # Stop ZooKeeper server
         $ $KAFKA_HOME/bin/zookeeper-server-stop.sh
+
+
+
+- Installing Kafdrop
+
+    - Download the most recent version from Kafdrop from Bintray:
+
+        https://github.com/obsidiandynamics/kafdrop/releases
+
+
+    - Now we can run it, using Java 11.
+
+        $ /usr/lib/jvm/java-11-openjdk-amd64/bin/java -jar kafdrop-3.27.0.jar \
+            --kafka.brokerConnect=localhost:9092
+
+
+    - And we can view the console in a web browser.
+
+        http://localhost:9000
