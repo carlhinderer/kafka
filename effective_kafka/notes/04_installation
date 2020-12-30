@@ -1,0 +1,62 @@
+-----------------------------------------------------------------------
+|  CHAPTER 4 - INSTALLATION                                           |
+-----------------------------------------------------------------------
+
+- Installing Kafka and ZooKeeper
+
+    - There are 4 options for installing Kafka and ZooKeeper:
+
+        1. Run them with Docker
+        2. Use a package manager
+        3. Clone them from GitHub and build them from source code
+        4. Download the official Kafka distribution, which comes with ZooKeeper
+
+      We'll do #4.
+
+
+    - Download Kafka:
+
+        # Download Kafka 2.7
+        $ https://mirrors.gigenet.com/apache/kafka/2.7.0/kafka_2.13-2.7.0.tgz
+
+        # Unpack it
+        $ tar zxf kafka_2.13-2.7.0.tgz
+
+        # Move it to /opt
+        $ sudo mv kafka_2.13-2.7.0 /opt
+
+        # Create a environment variable in ~/.bashrc
+        export KAFKA_HOME=/opt/kafka_2.13-2.7.0
+
+
+    - Launch Kafka and ZooKeeper
+
+        # Start Zookeeper
+        $ $KAFKA_HOME/bin/zookeeper-server-start.sh $KAFKA_HOME/config/zookeeper.properties
+
+        # Start Kafka
+        $ $KAFKA_HOME/bin/kafka-server-start.sh $KAFKA_HOME/config/server.properties
+
+
+    - Running in the Background
+
+        # Run ZooKeeper in background
+        $ $KAFKA_HOME/bin/zookeeper-server-start.sh -daemon $KAFKA_HOME/config/zookeeper.properties
+
+        # Run Kafka in background
+        $ $KAFKA_HOME/bin/kafka-server-start.sh -daemon $KAFKA_HOME/config/server.properties
+
+
+        # Standard output if written to file in background mode
+        # Look at ZooKeeper logs
+        $ tail -f $KAFKA_HOME/logs/zookeeper.out
+
+        # Look at Kafka logs
+        $ tail -f $KAFKA_HOME/logs/kafkaServer.out
+
+
+        # Stop Kafka server
+        $ $KAFKA_HOME/bin/kafka-server-stop.sh
+
+        # Stop ZooKeeper server
+        $ $KAFKA_HOME/bin/zookeeper-server-stop.sh
