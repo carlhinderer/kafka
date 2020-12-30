@@ -248,3 +248,79 @@
                 - Consumers are only allowed to read up to the HIGH WATER MARK.  This prevents 
                     cosumers from reading unreplicated data that may be lost in the event of a
                     leader failure.
+
+
+
+- Topics
+
+    - A 'topic' is a logical aggregation of partitions.  Topics allow for both parallelism and
+        load balancing.
+
+
+    - Since partitions exhibit total order, a topic exhibits partial order.  This allows us to 
+        process records in parallel where we can, and maintain order where we must.
+
+
+    - One way to think of a topic is as a wide stream, comprising multiple parallel substreams.
+        The term 'stream' may be used as a substitute for 'topic'.
+
+
+    - The producer decides how to partition records.  Sometimes, a producer will explicitly assign
+        a partition number to a record.  Much more often, the producer will create a key/value, and
+        will hash (using murmur2) the key modulo the number of partitions to get the partition 
+        number.
+
+
+    - A topic looks like:
+
+        Topic
+
+          Partition 0 |  007  008  009  010  011  012   <-|---PRODUCER 0
+          Partition 1 |  000  001  002                  \-|---PRODUCER 1
+          Partition 2 |  000  001  002  003             <-|---PRODUCER 2
+
+
+    - Note that 2 records with the same key will be in the same partition only if the number of
+        partitions has not changed.  Increasing the number of partitions (Kafka doesn't support
+        non-destructive downsizing) will lead to a breakdown of any prior order.
+
+
+    - Producers and consumers rarely care about partition numbers, only that related records are 
+        grouped together in causal order.
+
+
+
+- Consumer Groups and Load Balancing
+
+    - There can be any number of producers and any number of consumers simultaneously interacting
+        with a topic.
+
+
+    - A 'consumer' is a process or thread that attaches to a Kafka cluster via a client library.
+        A consumer generally (but not necessarily) becomes part of a 'consumer group'.  
+
+      Consumer groups are a load-balancing mechanism in Kafka.  They distribute partition assignments
+        evenly among the individual consumer instances in the group.
+
+      When the first consumer in a group subscribes to a topic, it gets all the partitons in the
+        topic.  When a second consumer subscribes, the partitions will be split in half.
+        Each partition is assigned to only a single consumer.  If there are more consumers than 
+        partitions, they will sit idle.
+
+
+    - Note that consuming an event does not remove it from the topic.  It's actually more of a 
+        'reader' than a 'consumer'.  In fact, a topic is an append-only log, and consumers have no
+        effect on the topic.  This is one of the main differences between traditional message queues
+        and event streams.
+
+
+    - A consumer maintains a vector of offsets for each assigned partition, and advances it internally
+        after each read.  Consumers read at their own pace - a backlogged consumer has no effect on
+        its peers.
+
+
+    - Consumer groups also ensure availability.  By periodically reading records from a topic, the
+        consumer implicitly signals to the cluster that it is in a healthy state, thereby extending
+        its lease on the partition assignment.
+
+      If it fails to read in the allowable deadline, its partitions will be reassigned.
