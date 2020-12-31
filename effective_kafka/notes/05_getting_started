@@ -286,3 +286,51 @@
           <artifactId>kafka-clients</artifactId>
           <version>2.7.0</version>
         </dependency>
+
+
+    - Interfacing with the Kafka client libraries is done primarily using the following classes:
+
+        - Producer = public interface of producer client
+        - KafkaProducer = implementation of Producer
+        - ProducerRecord = data structure with record attributes
+
+        - Consumer = public interface of consumer client
+        - KafkaConsumer = implementation of consumer
+        - ConsumerRecord = data structure with record attributes
+
+
+
+- Publishing Records
+
+    - We create a publisher in '/basic/BasicProducerSample.java'.  It produces new records
+        with the current time as the value, once per second.
+
+
+    - Then, we can build it.  We need to use Java 11, since the code contains modern features.
+
+        $ JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64" mvn clean
+        $ JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64" mvn compile
+        $ JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64" mvn package
+
+
+    - Now, we can run a single class with Maven, also using Java 11.
+
+        $ JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64" mvn exec:java \
+            -Dexec.mainClass="basic.BasicProducerSample"
+
+
+    - Here is how we configure the producer client.  Note the idempotence setting, which 
+        ensures that records are produced only once and in order:
+
+        final Map<String, Object> config = 
+        Map.of(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092", 
+               ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(), 
+               ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class.getName(), 
+               ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+
+
+    - We need to make sure that the Producer gets cleaned up after we are done using it, since
+        it uses multiple TCP connections.  The best way to do this is by using 'try-with-resources'
+        syntax:
+
+        try (var producer = new KafkaProducer<String, String>(config)) { ... }
