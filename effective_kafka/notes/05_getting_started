@@ -140,3 +140,124 @@
         $ $KAFKA_HOME/bin/kafka-delete-records.sh \
             --bootstrap-server localhost:9092 \
             --offset-json-file /tmp/offsets.json
+
+
+
+- Listing Consumer Groups
+
+    - The 'kafka-consumer-groups.sh' script can be used to query Kafka for a list of consumer
+        groups.
+
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+          --bootstrap-server localhost:9092 --list
+
+
+    - The result is a newline-separated list of consumer group names, which makes it easy for
+        us to iterate over them for administrative purposes.
+
+        #!/bin/bash
+
+        list_groups_cmd="$KAFKA_HOME/bin/kafka-consumer-groups.sh \
+          --bootstrap-server localhost:9092 --list"
+
+        forgroup in$(bash -c $list_groups_cmd); do
+          # do something with the $group variable
+        done
+
+
+
+- Describing a Consumer Group
+
+    - The 'kafka-consumer-groups.sh' script can also be used to display detailed state information
+        about each consumer group, including its partition offsets for the set of subscribed
+        topics.
+
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 \
+            --group cli-consumer --describe --all-topics
+
+
+    - To describe all groups:
+
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 \
+            --describe --all-groups --all-topics
+
+
+    - To get details about the present state of the consumer group, including the ID of the
+        coordinator node, the assignment strategy, the number of active members, and the
+        state of the group, the '--state' flag is used.
+
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 \
+            --describe --all-groups --state
+
+
+
+- Resetting Offsets
+
+    - We may encounter situations where we need to reset offsets.  An example is if we realize
+        a set of records contains erroneous data ('poisoned records').  Another example is if
+        we need to reprocess earlier records.
+
+
+    - To reset the offset to the low-water mark, we use the '--to-earliest' flag.  To reset the
+        offset to the high-water mark, we use the '--to-latest' flag is used.  Note that the
+        command will result in a 'dry run' unless the '--execute' flag is used.
+
+        # Reset offset to low-water mark
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 \
+            --topic getting-started --group cli-consumer \
+            --reset-offsets --to-earliest --execute
+
+
+    - In addition to resetting offsets for an entire topic, the reset operation can be performed
+        on a subset of a topic's partitions.
+
+        # Reset offset for partitions 0 and 1
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 \
+            --topic getting-started:0,1 --group cli-consumer \
+            --reset-offsets --to-offset 2 --execute
+
+
+    - This example uses Kafka's record timestamping to locate an offset based on a given
+        datetime value.  The offset will be reset to the earliest point that occurs at or after
+        the specified timestamp.
+
+        # Datetime value in ISO 8601 format
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 \
+            --topic getting-started:2 --group cli-consumer \
+            --reset-offsets --to-datetime2020-01-27T14:35:54.528+11:00 \
+            --execute
+
+
+    - Finally, we can shift by a fixed number of records using the '--shift-by' parameter.
+        We can shift forward (positive value) or backward (negative value).
+
+
+
+- Deleting Offsets
+
+    - Another method of resetting the offsets is to just delete them altogether.  This is
+        in effect a lazy reset, sine the assignment of new offsets does not occur until a
+        new consumer connects to the cluster.
+
+      When this happens, the 'auto.offset.reset' client property determines whether the
+        offset is reset to the earliest or latest offset.
+
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 \
+            --topic getting-started --group cli-consumer --delete-offsets
+
+
+
+- Deleting a Consumer Group
+
+    - To delete an entire consumer group and its associated state:
+
+        $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
+            --bootstrap-server localhost:9092 \
+            --group cli-consumer --delete
