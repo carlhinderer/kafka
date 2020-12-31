@@ -1,0 +1,76 @@
+-----------------------------------------------------------------------
+|  CHAPTER 5 - GETTING STARTED                                        |
+-----------------------------------------------------------------------
+
+- Creating a Topic
+
+    - We can create a topic from the command line using the 'kafka-topics.sh' script.
+
+        $ $KAFKA_HOME/bin/kafka-topics.sh --bootstrap-server localhost:9092 \
+             --create --partitions 3 --replication-factor 1 \
+             --topic getting-started
+
+
+    - We can also create a topic by clicking the 'New' button in Kafdrop.
+
+
+    - We can set the 'auto.create.topics.enable' broker config setting to true, and we don't
+        even have to manually create topics.  A topic will just get created automatically
+        when clients attempt to produce to or consume from it.
+
+      This is not advisable, though.  You might end up with stray topics due to typos, and
+        you don't get control over the number of partitions or other settings.
+
+
+
+- Publishing Records
+
+    - Now, we'll publish a few records using the 'kafka-console-producer.sh' script.
+
+        # Run to start producing
+        $ $KAFKA_HOME/bin/kafka-console-producer.sh \
+            --broker-list localhost:9092 \
+            --topic getting-started --property "parse.key=true" \
+            --property "key.separator=:"
+
+        # Now, create the new records, which are separated by newlines
+        foo:first message
+        foo:second message
+        bar:first message
+        foo:third message
+        bar:second message
+
+        # Press Cntl+D when done
+
+
+
+- Consuming Records
+
+    - Now, we'll consume some records with the 'kafka-console-consumer.sh' script.
+
+        # Consume the records
+        $ $KAFKA_HOME/bin/kafka-console-consumer.sh \
+             --bootstrap-server localhost:9092 \
+             --topic getting-started --group cli-consumer --from-beginning \
+             --property "print.key=true" --property "key.separator=:"
+
+        # The terminal will output
+        bar:first message
+        bar:second message
+        foo:first message
+        foo:second message
+        foo:third message
+
+        # The consumer will continue to tail the topic, Press Cntl+D to stop it
+
+
+    - Note that we used the '--from-beginning' flag.  By default, a first-time consumer will
+        have its offsets reset to the topic's high-water mark.  We override this offset to tail
+        the topic's low-water mark.
+
+      To start from the end of the topic, just delete the consumer offsets and start the CLI
+        consumer with no flag.
+
+
+    - In Kafdrop, we can navigate to the topic and we'll see our new consumer.  If we click on
+        it, we'll see the offset for each partition.
