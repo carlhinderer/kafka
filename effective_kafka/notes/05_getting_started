@@ -74,3 +74,69 @@
 
     - In Kafdrop, we can navigate to the topic and we'll see our new consumer.  If we click on
         it, we'll see the offset for each partition.
+
+
+
+- Listing Topics
+
+    - We can list the topics with the 'kafka-topics.sh' script.
+
+        $ $KAFKA_HOME/bin/kafka-topics.sh \
+            --bootstrap-server localhost:9092 \
+            --list --exclude-internal
+
+
+
+- Describing a Topic
+
+    - We can also get details about a topic with the 'kafka-topics.sh' script.
+
+        $ $KAFKA_HOME/bin/kafka-topics.sh \
+            --bootstrap-server localhost:9092 \
+            --describe --topic getting-started
+
+
+
+- Deleting a Topic
+
+    - We can also delete a topic using the 'kafka-topics.sh' script.
+
+        $ $KAFKA_HOME/bin/kafka-topics.sh \
+            --bootstrap-server localhost:9092 \
+            --topic getting-started --delete
+
+
+    - Topic deletion is an asynchronous operation, which will be performed by a 
+        background process some time in the future.  In the meantime, it may seem to 
+        linger around.
+
+      This can require some creativity when writing integration tests, for example.  The
+        most common way around this is to use a unique topic for each test, to avoid
+        topics interfering with other tests.
+
+
+
+- Truncating Partitions
+
+    - Although a partition is backed by an immutable log, Kafka has a mechanism to
+        truncate all records in the log up to a user-specified low-water mark.
+
+      This can be achieved by passing a JSON document to the 'kafka-delete-records.sh' tool, 
+        specifying the topics and partitions for truncation, with the new low-watermark in the
+        'offset' attribute.
+
+
+    - Here, we create a json document and pass it into the 'kafka-delete-records.sh' script.
+
+        cat << EOF > /tmp/offsets.json
+        {
+          "partitions": [
+            {"topic": "getting-started", "partition": 2, "offset": 1}
+          ],
+          "version": 1
+        }
+        EOF
+    
+        $ $KAFKA_HOME/bin/kafka-delete-records.sh \
+            --bootstrap-server localhost:9092 \
+            --offset-json-file /tmp/offsets.json
