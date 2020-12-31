@@ -261,3 +261,28 @@
         $ $KAFKA_HOME/bin/kafka-consumer-groups.sh \
             --bootstrap-server localhost:9092 \
             --group cli-consumer --delete
+
+
+
+- Client Libraries
+
+    - The built-in CLI tools rely on the presence of binaries and a pre-installed Java
+        runtime.  When we write applications, they rely solely on distributable client
+        libraries.  There are Kafka libraries available for all popular programming languages.
+
+
+    - In this book, we use the Java libraries, which are the most mature and are developed
+        alongside the Kafka broker.  The C library is maintained closely also, and other
+        libraries may be a bit behind on new features.
+
+
+
+- Using the Java library
+
+    - If we are using Maven, we add this to our pom.xml:
+
+        <dependency>
+          <groupId>org.apache.kafka</groupId>
+          <artifactId>kafka-clients</artifactId>
+          <version>2.7.0</version>
+        </dependency>
