@@ -1,0 +1,46 @@
+-----------------------------------------------------------------------
+|  CHAPTER 6 - DESIGN CONSIDERATIONS                                  |
+-----------------------------------------------------------------------
+
+- Roles and Responsibilities
+
+    - Event-Oriented Broadcast
+
+        - In a broadcast arrangment, it is a best practice for the producer ecosystem to
+            assume ownership of the topic.  This includes:
+
+            - The lifecycle of the topic and the broker-side configuration
+            - Retention and compaction
+            - Nature and content of data, encodings, record schema, versioning strategy
+            - Number of partitions and keying of records
+
+
+        - The consumer just decides whether to subscribe to the topic of not
+
+
+    - Peer-to-peer Messaging
+
+        - In this case, a consumer is effectively responding to specific commands issues by
+            the producer, and in most cases emitting responses back to the producer.
+
+
+        - In this case, the consumer should have custodianship over the topic.
+
+
+    - Topic Conditioning
+
+        - A problem can arise, when the producer has total control of the topic, where consumers
+            cannot trust that they will not be negatively affected by changes in the producer.
+
+
+        - A SEDA (Staged Event-Driven Architecture) can help solve this problem.  We can have 
+            intermediate topics that condition the data to conform to an individual consumer
+            group's expectations.
+
+
+                                           CONDITIONING GROUP A  ->  TOPIC FOR A  ->  Consumer
+                                        /      (Transform)
+            Producer  ->  COMMON TOPIC  
+                                        \
+                                           CONDITIONING GROUP B  ->  TOPIC FOR B  ->  Consumer
+                                               (Transform)
