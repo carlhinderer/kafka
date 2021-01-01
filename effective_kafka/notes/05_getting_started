@@ -334,3 +334,29 @@
         syntax:
 
         try (var producer = new KafkaProducer<String, String>(config)) { ... }
+
+
+    - There are 2 versions of the 'send()' method.  We use the one that provides a callback to
+        be called if an error occurs.
+
+        producer.send(new ProducerRecord<>(topic, key, value), callback);
+
+
+
+- Consuming Records
+
+    - We consume records in the poll-process loop in 'basic/BasicConsumerSample.java'.
+
+        final var topic = "getting-started";
+
+        try (var consumer = new KafkaConsumer<String,String>(config)) {
+            consumer.subscribe(Set.of(topic));
+
+            while (true) {
+                final var records = consumer.poll(Duration.ofMillis(100));
+                for (var record:records) {
+                    out.format("Got record with value %s%n",record.value());
+                }
+                consumer.commitAsync();
+            }
+        }
