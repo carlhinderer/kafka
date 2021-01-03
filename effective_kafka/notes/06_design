@@ -44,3 +44,133 @@
                                         \
                                            CONDITIONING GROUP B  ->  TOPIC FOR B  ->  Consumer
                                                (Transform)
+
+
+
+- Parallelism
+
+    - Exploiting partial order enables consumer parallelism.  The distribution of partition
+        assignments among consumer groups is how this is achieved.  There are several factors
+        we must consider when doing this.
+
+
+    - Producer-driven partitioning
+
+        - The responsibility of assigning records to partitions lies solely with the producer.
+            This is because both topics and partitions are phyical constructs, implemented as
+            segmented log files.
+
+
+        - For this reason, we must choose the right key for the data carefully.  In practice,
+            events will relate to some stable entity.
+
+
+        - For example, let's say we have a feed of events from football matches.  We want to
+            pick a key that will be stable for the lifetime of all causally related events.  So,
+            we pick the match as the key, since it will survive all of its in-play events.
+
+          We can sort of think of the key as a foreign-key relation.
+
+
+        - Assuming no predecessor-successor relationship between the stable entities, the partial
+            order of resulting records will be sufficient for most downstream consumers.
+
+
+        - But if there is a predecessor-successor relationship, we need to take a different 
+            approach.  For instance, let's say all the matches are part of a tournament, and we 
+            want to keep track of who is doing well in the tournament in real-time.  In this case,
+            we have 2 options:
+
+            1. Coarsen the granuality of event ordering by using the tournament as the key.  This
+                 preserves chronological ordering of the entire tournament.  This is the easier
+                 way, but it reduces the opportunity for consumer parallelism.
+
+            2. Transfer the responsibility of event reordering to a downstream subscriber.  This
+                 may be difficult or impossible in practice, depending on the data in the records.
+
+          As a hybrid approach, we could keep granular data where it is needed, then have a 
+            conditioning stage that partitions data for consumers that don't need the granularity.
+
+
+    - Topic Width
+
+        - The next consideration is the 'width' of the topic - how many partitions it should have.
+            Assuming you have enough keys, increasing the number of partitions increases
+            consumer parallelization.
+
+
+        - Kafka only permits non-destructive resizing of topics when increasing the partition 
+            count.  Decreasing the partition count is destructive - it requires the topic to be
+            created anew and manually repopulated.
+
+
+        - Note that Kafka's hashing scheme is not consistent.  Two records with the same key will
+            be in the same partition iff the number of partitions is the same.  Kafka will not
+            rehash records as part of a resizing, as this would be prohibitively expensive.
+
+
+        - If the correctness of a system is predicated on the key-centric ordering of records,
+            avoid resizing the topic.
+
+
+        - One approach to dealing with prospective growth is to start with an over-provisioned
+            topic.  For instance, an order of magnitude higher number of partitions than you 
+            expect to need.  This avoids the rehashing problem down the road, but it does put
+            extra load on the brokers and consumers.
+
+          A partition is backed by log files, which require additional file descriptors. 
+            Inbound writes flow to dedicated buffers, which are allocated one per partition on
+            brokers, so extra memory will be consumed also.  Consumers also have per-partiton
+            buffers, so they will have the same problem.
+
+          Also, a broker will allocate a thread for every other broker it maintains a connection
+            with for replication purposes.  For this reason, Confluent (one of the main Kafka
+            contributors) recommends limiting the number of partitions per broker to 100 * b * r
+            (b = # of brokers, r = replication factor).
+
+
+    - Scaling of the Consumer Group
+
+        - Kafka will allocate partitions evenly among the consumer group, up to the width of a
+            topic.  To increase parallelism, we must have a sufficient number of consumer instances
+            in the group.
+
+
+        - Allocating a fixed number of consumers to the group is usually not economical, since 
+            some consumers may sit idle.  The recommended approach is to use an elastic
+            automatic horizontal scaling approach.  
+
+          For instance, if using AWS, autoscaling based on CPU utilization could be used.  If using
+            Kubernetes, horizontal pod autoscaling could be used.
+
+
+    - Internal Consumer Parallelism
+
+        - An alternative way to increase consumer throughput, without widening the topic or
+            scaling the consumer group, is to exploit parallelism within the consumer process.
+
+          This can be done by partitioning the workload among a pool of threads by independently
+            hashing the record keys to maintain local order.  This can be thought of as
+            vertical scaling.
+
+
+
+- Idempotence and Exactly-Once Delivery
+
+    - We looked earlier at how shifting the point when consumers commit their offsets can allow
+        us to switch between at-least-once and at-most-once delivery guarantees.
+
+      We also need to think about an exactly-once delivery guarantee.
+
+
+    - Essentially, it is impossible for a messaging system to provide an exactly-once guarantee.
+        If a message should be processed exactly once, at-least-once semantics should be used,
+        along with an idempotent approach on the consumer.
+
+      In this case, a consumer must always assume every message may be a duplicate.  They must
+        take care to make sure every side effect (ie database write, API call, publishing to
+        a downstream topic) is idempotent.
+
+
+    - Kafka does offer an advanced transaction mechanism for correlating the records consumed
+        with input topics to the resulting records in output topics.  
