@@ -152,6 +152,7 @@
       The interface is located at '/effectivekafka/customerevents/sender/EventSender.java'.
 
         public interface EventSender extends Closeable {
+
             // Asynchronous send
             Future<RecordMetadata> send(CustomerPayload payload);
           
@@ -171,6 +172,27 @@
           
             @Override
             public void close();
+        }
+
+
+    - Next, we add a sample user of the 'EventSender' interface, the 'ProducerBusinessLogic'
+        class.
+
+        public final class ProducerBusinessLogic {
+            private final EventSender sender;
+          
+            public ProducerBusinessLogic(EventSender sender) {
+                this.sender = sender;
+            }
+          
+            public void generateRandomEvents() throws SendException, InterruptedException {
+                // Randomly create instances of the 4 events
+            }
+          
+            private void blockingSend(CustomerPayload payload) throws SendException, InterruptedException {
+                System.out.format("Publishing %s%n", payload);
+                sender.blockingSend(payload);
+            }
         }
 
 
