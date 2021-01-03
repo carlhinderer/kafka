@@ -1,0 +1,104 @@
+-----------------------------------------------------------------------
+|  CHAPTER 7 - SERIALIZATION                                          |
+-----------------------------------------------------------------------
+
+- Key and Value Serializer
+
+    - Distributed applications communicating in a message-passing or event-driven style will
+        typically need to bridge from native PL constructs to Kafka serializable types.
+
+
+    - Previously, we used the 'Producer' and 'Consumer' APIs, along with the 'ProducerRecord'
+        and 'ConsumerRecord' classes, which are generically typed.
+
+      The 'Producer' interface is parameterized with a key and value type:
+
+        public interface Producer<K, V> extends Closeable {
+            /** some methods omitted for brevity */
+
+            Future<RecordMetadata> send (ProducerRecord<K, V> record);
+
+            Future<RecordMetadata> send (ProducerRecord<K, V> record, Callback callback);
+        }
+
+
+    - In our earlier 'BasicProducer' and 'BasicConsumer' classes, we had simple string serializers
+        for the key and values types.  If we want to create a custom serializer for one of the
+        types, it must conform to the Kafka serializer interface:
+
+        public interface Serializer<T> extends Closeable {
+
+            default void configure (Map<String, ?> configs, boolean isKey) {
+                // intentionally left blank
+            }
+
+            byte[] serialize (String topic, T data);
+
+            default byte[] serialize (String topic, Headers headers, T data){
+                return serialize(topic,data);
+            }
+
+            @Override
+            default void close() {
+                // intentionally left blank
+            }
+        }
+
+
+    - Serializers are configured in 1 of 2 ways:
+
+        1. Pass in the fully-qualified class name to the Producer via the key.serializer and
+             value.serializer properties.
+
+        2. Directly instantiate the serializer and pass it in as a reference to the 'KafkaProducer'
+             constructor.
+
+
+    - Kafka comes with a few pre-canned serializers that can be used:
+
+        ByteArraySerializer
+        ByteBufferSerializer
+        BytesSerializer
+
+        DoubleSerializer
+        FloatSerializer
+        IntSerializer
+
+        KafkaMessageSerializer
+        LongSerializer
+        Short Serializer
+
+        StringSerializer
+        UUIDSerializer
+        ExtendedSerializer<T>
+
+
+    - In most applications:
+
+        - Keys are simple unstructured values such as integers, strings, or UUIDs, and a
+            built-in serializer will suffice.
+
+        - Values tend to be structured payloads conforming to some pre-agreed schema, represented
+            using a text or binary encoding.  Typical examples include JSON, XML, Avro, Thrift,
+            and Protocol Buffers.
+
+
+    - When serializing a custom payload to a Kafka record, there are generally 2 approaches:
+
+        1. Implement a custom payload serializer to directly handle the payload.  This is the
+             idiomatic Kafka way to do it.
+
+           We would subclass 'Serializer', implementing its 'serialize()' method.
+
+             byte[] serialize (String topic, T data);
+
+
+        2. Serialize the payload at the application level.  This involves piggybacking on an
+             existing serializer that matches the underlying encoding.  For instance, use the
+             'StringSerializer'.
+
+
+    - A well-thought-out applicaiton will clearly separate business logic from the persistence
+        and messaging concerns.  It makes sense for the 'Producer' class to be encapsulated in
+        its own layer, ideally using an interface that allows the messaging code to be mocked out
+        independently for unit testing.
