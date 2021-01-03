@@ -105,7 +105,7 @@
 
 
 
-- Sending Events
+- Creating the Events
 
     - For this section, we will use a contrived event streaming scenario involving a basic
         application for managing customer records.
@@ -139,6 +139,39 @@
         '/effectivekafka/customerevents/event/UpdateCustomer.java'
         '/effectivekafka/customerevents/event/SuspendCustomer.java'
         '/effectivekafka/customerevents/event/ReinstateCustomer.java'
+
+
+
+- Sending the Events
+
+    - Ideally, we would like to inject a high-level event sender into the business logic, then
+        have our business logic invoke the sender whenever it needs to produce an event, without
+        concerning itself with how the event is serialized or published to Kafka.  This is the
+        perfect case for an interface:
+
+      The interface is located at '/effectivekafka/customerevents/sender/EventSender.java'.
+
+        public interface EventSender extends Closeable {
+            // Asynchronous send
+            Future<RecordMetadata> send(CustomerPayload payload);
+          
+            final class SendException extends Exception {
+                ...
+            }
+          
+            // Synchronous send
+            default RecordMetadata blockingSend(CustomerPayload payload) 
+                                   throws SendException, InterruptedException {
+                try {
+                    return send(payload).get();
+                } catch (ExecutionException e) {
+                    throw new SendException(e.getCause());
+                }
+            }
+          
+            @Override
+            public void close();
+        }
 
 
 
