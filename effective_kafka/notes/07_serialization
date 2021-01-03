@@ -129,6 +129,18 @@
         us to use the libary's built-in support for polymorphic types.
 
 
+    - First, we create the abstract base class in 
+        '/effectivekafka/customerevents/event/CustomerPayload.java'.
+
+
+    - Next, we create the customer event classes that extend the 'CustomerPayload'.
+
+        '/effectivekafka/customerevents/event/CreateCustomer.java'
+        '/effectivekafka/customerevents/event/UpdateCustomer.java'
+        '/effectivekafka/customerevents/event/SuspendCustomer.java'
+        '/effectivekafka/customerevents/event/ReinstateCustomer.java'
+
+
 
 - The Complete Sender
 
