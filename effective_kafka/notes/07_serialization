@@ -102,3 +102,50 @@
         and messaging concerns.  It makes sense for the 'Producer' class to be encapsulated in
         its own layer, ideally using an interface that allows the messaging code to be mocked out
         independently for unit testing.
+
+
+
+- Sending Events
+
+    - For this section, we will use a contrived event streaming scenario involving a basic
+        application for managing customer records.
+
+      Every change to the customer entity results in the publishing of a corresponding event to
+        a single Kafka topic.  
+
+
+    - Every event is strongly typed, and there are several event classes, each bound to a
+        dedicated schema.  The POJO representations are 'CreateCustomer', 'UpdateCustomer', 
+        'SuspendCustomer', and 'ReinstateCustomer'.  The abstract base class for all of these
+        is 'CustomerPayload'.
+
+      The key is a UUID which uniquely identifies the employee.
+
+
+    - We are assuming records are serialized using JSON.  We will use the 'FasterXML Jackson'
+        library, the de facto JSON parser in Java.
+
+      Subclasses of 'CustomerPayload' are specifed using a @JsonSubTypes annotation, which allows
+        us to use the libary's built-in support for polymorphic types.
+
+
+
+- The Complete Sender
+
+
+- Key and Value Deserializer
+
+
+- Receiving Events
+
+
+- Corrupt Records
+
+
+- The Complete Receiver
+
+
+- Pipelining
+
+
+- Record Filtering
