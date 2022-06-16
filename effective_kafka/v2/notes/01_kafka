@@ -1,0 +1,130 @@
+----------------------------------------------------------------------------
+|  1 - APACHE KAKFA                                                        |
+----------------------------------------------------------------------------
+
+- Apache Kafka
+
+    - 70% of Fortune 500 Companies
+    - There are systems for data at rest, Kafka is foundation for platforms for data in motion
+    - Streaming platform = subscribe to streams of data, store them, process them
+
+
+
+- Kafka gets compared to
+
+    1. RabbitMQ-like messaging systems
+    2. 'real-time version of Hadoop'
+    3. ETL or data integration tools
+
+    - Differences from RabbitMQ-type systems
+        1. Massive company-wide scale (run one queue instead of a bunch of them)
+        2. Durability (also provides real delivery guarantees)
+        3. Stream processing = compute derived streams and datasets dynamically with far less code
+
+    - Difference from 'real-time version of Hadoop'
+        1. Low-latency processing can be used to run business, not just generate reports
+
+    - Difference from ETL or data integration tools
+        1. Real-time system of events rather than moving data from one place to another
+
+    - Kafka unifies all the use cases together.
+
+
+
+- Popular use cases:
+
+    1. Message bus for event-driven microservices
+    2. Stream processing applications
+    3. Large-scale data pipelines
+
+
+
+- Pub/Sub Messaging
+
+    - Broker decouples sender from receiver
+    - Kafka = "distributed commit log" that can be replayed to consistently rebuild state
+
+
+
+- Messages
+
+    - Message is just array of bytes, has no meaning to Kafka
+    - Optional key also has no meaning to Kafka
+    - Keys are used when message need to be written to partitions in a more controlled manner
+        (Easiest way: generate consistent hash of key, % num_partitions)
+    - Messages are written in batches for efficiency
+
+
+
+- Schemas
+
+    - Even though Kafka doesn't care, it's a good idea to use schemas
+    - Simple options like JSON or XML work, but lack types and versioning
+    - Avro (serialization framework originally developed for Hadoop) is preferred
+
+
+
+- Topics and Partitions
+
+    - Messages are broken down into topics
+    - Topics have multiple partitions, ordering in a topic is guaranteed only across partition
+    - Partitions provide scaling
+    - Partitions can be replicated
+    - A 'stream' is usually considered to be a topic, regardless of the number of partitions
+
+
+
+- Producers and Consumers
+
+    - 2 types of clients
+    - There are also advanced client APIs (Kafka Connect and Kakfa Streams) built on top
+    - By default messages are distributed to all partitions, but can control using key
+    - Consumers read messages in order by keeping track of offset
+    - Consumers work as part of a consumer group (one or more consumers consuming a topic)
+    - Mapping of consumer to partition is called 'ownership' of partition by consumer
+    - If consumer fails, remaining consumers will reassign partition to take over
+
+
+
+- Brokers and Clusters
+
+    - A single Kafka server is a 'broker'
+    - Broker receives messages from producers, assigns them an offset, and writes them to disk
+    - Broker also responds to fetch requests for partitions
+    - Single broker can handle millions of messages per second
+    - Brokers are designed to operate as part of a cluster
+    - One broker is cluster controller, responsible for admin functions, called 'leader'
+    - A replicated partition is assigned to other brokers called 'followers'
+    - All producers must connect to leader to publish messages
+    - Consumers can fetch from any follower
+    - Replication provides redundancy of messages in the partition
+    - MirrorMaker project allows you to have multiple clusters
+
+
+
+- Why Kafka?
+
+    - Multiple producers produce messages, don't worry about clients
+    - Consumers can read without interfering with each other, can consume whenever
+    - Disk-based retention
+    - Scalability (to hundreds of brokers)
+    - Subsecond latency from producer to consumer, even in big clusters
+    - Lots of platform features and extensions
+
+
+
+- Use Cases
+
+    1. User activity tracking at LinkedIn was original use case
+    2. Messaging applications
+    3. Metrics and logging (could route log messages to ElasticSearch or security apps)
+    4. Commit log (Can publish DB changes and use commit log to replicate)
+    5. Stream processing (aggreations like counts, transformations of messages)
+
+
+
+- Kafka
+
+    - Solved problem of moving data around at LinkedIn
+    - Pub/sub system, interface like messaging system, but storage engine like log aggregation system
+    - Open source in 2010, ASF in 2011
