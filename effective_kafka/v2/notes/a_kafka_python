@@ -1,0 +1,85 @@
+----------------------------------------------------------------------------
+|  A - BUILDING AN APACHE KAKFA CLUSTER                                    |
+----------------------------------------------------------------------------
+
+- Producing Messages with kafka-python
+
+    - First, we need to install the python client library.
+
+        # requirements.txt
+        --------------------------
+        kafka-python
+
+
+    - Now, we can produce a message:
+
+        import random
+        import time
+
+        from kafka import KafkaProducer
+
+        producer = KafkaProducer(bootstrap_servers='localhost:9092')
+
+        while True:
+            producer.send(
+                topic='pageview',
+                key=f"{random.randrange(999)}".encode(),
+                value=f"{\"URL\":\"URL{random.randrange(999)\"}".encode()
+            )
+            time.sleep(1)
+
+
+
+- Consuming Messages with kafka-python
+
+    - Kafka keeps track of which messages were processed
+        by each consumer application using a consumer 'group_id'.  Consumers under a same 'group_id'
+        share messages, parallelizing the work of consuming the messages.
+
+
+    - Now, we can add a message consumer.
+
+        from kafka import KafkaConsumer
+
+        consumer = KafkaConsumer('pageview',
+                                 auto_offset_reset='earliest',
+                                 group_id='pageview-group1',
+                                 bootstrap_servers='localhost:9092')
+
+        for message in consumer:
+            print(f"""
+                topic     => {message.topic}
+                partition => {message.partition}
+                offset    => {message.offset}
+                key={message.key} value={message.value}
+            """)
+
+
+
+- Using Multiple Consumers
+
+    - What makes Kafka powerful is how easy we can parallelize the consumption of the messages,
+        taking away complexity from your code.
+
+
+    - If we start a second consumers with the same 'group_id' as the first one, the new
+        consumer will start consuming messages, while the first one will become idle.  This is
+        because we didn't specify the number of partitions when we created our topic, and the
+        default is 1.
+
+      The number of partitions defines the number of consumers that can be used for each 
+        consumer 'group_id'.
+
+
+    - We'll update our topic to have 2 partitions:
+
+        $ docker exec -it kafka_kafka_1 bash
+
+            $ kafka-topics.sh \
+                --topic pageview \
+                --alter \
+                --partitions 2 \
+                --bootstrap-server localhost:9092
+
+
+    - Now, we can start 2 consumers with the same 'group_id', and they will both consume messages.
