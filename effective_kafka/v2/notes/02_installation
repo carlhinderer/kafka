@@ -1,0 +1,186 @@
+----------------------------------------------------------------------------
+|  CHAPTER 2 - INSTALLING KAFKA & ZOOKEEPER                                |
+----------------------------------------------------------------------------
+
+- Apache ZooKeeper
+
+    - Kafka uses ZooKeeper to store metadata about the cluster and consumer details
+    - ZooKeeper = service for maintaining config info, naming, distributed synchronization
+    - ZooKeeper is designed to work in an ensemble
+
+
+
+- Running a Kafka Cluster with Docker
+
+    - After copying the docker-compose development configuration
+        (https://github.com/rafaelzimmermann/learn-kafka-with-python.git), we can start the 
+        Zookeeper and Kafka containers.
+        
+        $ docker-compose up
+
+
+    - To create a topic, we can exec into the Kafka container.
+
+        $ docker exec -it kafka_kafka_1 bash
+
+        # Create a topic called 'pageview'
+        $ kafka-topics.sh --bootstrap-server localhost:9092 --create --topic pageview
+
+        # List topics
+        $ kafka-topics.sh --list --bootstrap-server localhost:9092
+
+
+    - To produce messages to the topic:
+
+        # Will give you a prompt to type messages into
+        $ kafka-console-producer.sh --bootstrap-server localhost:9092 --topic pageview
+
+        # Read messages in a topic
+        $ kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic pageview -from-beginning
+
+
+
+- Environment Setup
+
+    - Usually run Kafka on Linux, although it can run on other systems.
+    - We'll need Java installed, preferably the entire JDK
+    - ZooKeeper can either be a standalone server or an ensemble
+
+
+
+- Installing a Kafka Broker
+
+    - After installing and running ZooKeeper and Kafka, we test it be creating and verifying a topic:
+
+        # Create a topic called 'test'
+        $ kafka-topics.sh --bootstrap-server localhost:9092 
+                          --create 
+                          --replication-factor 1 
+                          --partitions 1
+                          --topic test
+
+        # Describe the new topic
+        $ kafka-topics.sh --bootstrap-server localhost:9092 --describe --topic test
+
+
+    - To produce messages to the test broker (Press Cntl+C to stop):
+
+        # Produce messages
+        $ kafka-console-producer.sh --bootstrap-server localhost:9092 --topic test
+
+
+    - Now, we can consume messages from the topic:
+
+        # Consume messages
+        $ kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test --from-beginning
+
+
+
+- Broker Configuration - General Broker Parameters
+
+    broker.id                             # Every broker must have a unique id
+
+    listeners                             # Comma-separated list of URIs we listen on with listener
+                                          #   names (Leaving this as 0.0.0.0 will bind to all 
+                                          #   interfaces).
+
+    zookeeper.connect                     # Location of Zookeeper service (default is localhost:2181)
+
+    log.dirs                              # Place where log segments are stored
+
+    num.recovery.threads.per.data.dir     # Number of threads to keep in pool for startup
+
+    auto.create.topics.enable             # Normally a broker creates a new topic if a producer or
+                                          #   consumer uses it, we can change this here
+
+    auto.leader.rebalance.enable          # Balance topic leadership across cluster if possible
+
+    delete.topic.enable                   # Lock cluster to disallow topic deletion
+
+
+
+- Topic Defaults
+
+    num.partitions                        # Number of partitions a new topic is created with
+                                          #   (Many people will choose number of brokers)
+
+    default.replication.factor            # Replication factor for new topics
+
+    log.retention.ms                      # How long messages will be retained 
+                                          #  (Default is 'log.retention.hours' = 168)
+
+    log.retention.bytes                   # Expire messages based on space instead
+
+    log.segment.bytes                     # Size of individual log segment bytes, particularly
+                                          #   affects the performance of fetching by timestamp
+
+    log.roll.ms                           # Amount of time before closing log file and creating another
+
+    min.insync.replicas                   # Number of replicas that are caught up and in sync with
+                                          #   producer, ensures at least 2 replicas ack a write
+
+    message.max.bytes                     # Maximum size of individual message (default is 1 MB)
+
+
+
+- Selecting Hardware
+
+    - Disk throughput is most important, since Kafka commits messages to local storage when they are
+        produced.  HDDs usually better for large amounts of data, SSDs better if lots of client
+        connections are required.
+
+    - Disk capacity is based on retention requirements and replication strategy.
+
+    - Memory is important, since most recent messages (majority of reads) are stored in the system's
+        page cache.  This improves consumer performance.
+
+    - Network performance can become a bottleneck, especially if there are a lot of consumers.  NICs
+        that are at least 10 Gb/s are recommended.
+
+    - CPU becomes a concern when you begin to scale clusters really large (hundreds of nodes), when
+        compressing/decompressing all messages becomes required.
+
+
+
+- Kafka in the Cloud
+
+    - Companies like Confluent and HDInsight have hosted versions of Kafka available.
+
+    - In Azure, it is highly recommended to use 'Azure Managed Disks' rather than ephemeral disk, so
+        you don't run the risk of losing all your data.
+
+    - On AWS, if very low latency is required, you might need local SSD storage.  Otherwise, ephemeral
+        storage like 'Amazon Elastic Block Store' might be sufficient.
+
+
+
+- Configuring Kafka Clusters
+
+    - Even in very large clusters, we shouldn't have more than 14,000 partition replicas per broker.
+        And we shouldn't have more than 1 million partition replicas per cluster.
+
+    - We want to avoid swapping, since the system page cache is used so heavily.  The recommenation 
+        is to set 'vm.swappiness' = 1 on our Kafka servers.
+
+    - We'll have to choose our disk technology, whether to use RAID, and what type of filesystem to
+        use.  XFS is becoming the default over ext4, and is generally more performant.
+
+    - We usually make networking changes similar to the ones web servers and other networking 
+        applications do.  We can increase the amount memory allocated for the send and receive
+        buffers for each socket.  We can also increase the size of TCP buffers.
+
+
+
+- Production Concerns
+
+    - We can set the 'browser.rack' setting for rack awareness, so that we can avoid putting
+        multiple replicas on the same rack.  Best practice is have each broker installed on a
+        separate rack.
+
+    - Kafka utilizes ZooKeeper for storing metadata information about the brokers, topics, and 
+        partitions.  Since writes only occur when config changes are made, we can easily share a
+        ZooKeeper ensemble with other Kafka clusters, but shouldn't share one with other applications.
+
+    - In general, Kafka has been moving in the direction of needing ZooKeeper less over time.  Most
+        things are now handled directly by Kafka.  We can see all the options that use 
+        '--bootstrap-server' instead of '--zookeeper' now.
