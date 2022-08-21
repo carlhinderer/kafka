@@ -1,0 +1,228 @@
+----------------------------------------------------------------------------
+|  CHAPTER 3 - KAFKA PRODUCERS                                             |
+----------------------------------------------------------------------------
+
+- Kafka Producers
+
+    - In this chapter, we'll look at Kafka's built-in 'KafkaProducer' and 'ProducerRecord' objects.
+        In addition to these built-in clients, Kafka has a binary wire protocol, so many third party
+        clients have been created as well.
+
+
+    - For every use case we should ask ourselves:
+
+        1. Is every message critical, or can we tolerate loss of messages?
+        2. Are we OK with duplicated messages?
+        3. Are there strict latency or throughput requirements?
+
+
+    - For instance, we are sending credit card processing messages.  We cannot lose messages or tolerate
+        duplicated messages.  Throughput will be high (1 million messages per s) and latency should be
+        under 500 ms.
+
+
+    - Another use case is storing click events from a website.  In this case, some message loss or
+        duplication is tolerable.  Latency can be high as long as it doesn't affect the user experience.
+
+
+
+- High-Level Producer Flow
+
+    1. We start producing messages by creating a 'ProducerRecord', which must have a topic and value.
+         Optionally, we can also specify a key, a partition, a timestamp, and/or a collection of 
+         headers.
+
+       Once we send the ProducerRecord, the producer will serialize the key and value objects to byte
+         arrays so they can be sent over the network.
+
+
+    2. Next, if we didn't explicitly specify a partition, the data is sent to a partitioner.  The
+         partitioner will choose a partition for us, usually based on the 'ProducerRecord' key.
+
+       Once a partition is selected, the producer knows which topic and partition the record will go
+         to.  It adds the message to a batch that will go to the same topic and partition.  A separate
+         thread is responsible for sending those batches to the appropriate Kafka brokers.
+
+
+    3. When the broker retrieves the messages, it sends back a response.  If the messages were written
+         successfully, it will return a 'RecordMetadata' object with the topic, partition, and
+         offset of the record within the partition.
+
+       If the broker failed to write the messages, it will return an error.  When the producer receives
+         an error, it may retry sending the message a few more times before giving up.
+
+
+
+- Constructing a Kafka Producer
+
+    - First, we need to create a producer object with the properties we want to pass to the producer.
+        There are 3 mandatory properties:
+
+        bootstrap.servers                  # List of host:port pairs of brokers the producer will use
+                                           #   to establish initial connection to the cluster
+                                           #   (Does not need to include all brokers, but should include 2)
+
+        key.serializer                     # Name of class used to serialize keys
+
+        value.serializer                   # Name of class used to serialize values
+
+
+    - Here is an example of the most basic configuration:
+
+       Properties kafkaProps = new Properties();
+
+       kafkaProps.put("bootstrap.servers", "broker1:9092,broker2:9092");
+       kafkaProps.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+       kafkaProps.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer");
+
+       producer = new KafkaProducer<String, String>(kafkaProps);
+
+
+
+- Sending a Message to Kafka
+
+    - Now that we have instantiated a producer, we can start sending messages.  There are 3 primary 
+        methods of sending messages:
+
+        1. Fire-and-forget = We send a message, and don't really care whether it arrives successfully
+                               or not.
+
+        2. Synchronous send = Technically, a Kafka producer is always asynchronous - we send a message,
+                                and the 'send()' method returns a 'Future' object.  However, we use
+                                'get()' to wait on the 'Future' before sending the next record.
+
+        3. Asynchronous send = We call the 'send()' method with a callback function, which gets
+                                 triggered when it receives a response from the Kafka broker.
+
+
+    - Here is the simplest way to send a message:
+
+        ProducerRecord<String, String> record =
+            new ProducerRecord<>("CustomerCountry", "Precision Products", "France");
+
+        try {
+            producer.send(record);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+      We are using fire-and-forget here, and we're ignoring any errors we receive back from Kafka.
+        The exceptions we are catching are thrown before sending the message to Kafka.
+
+
+
+- Sending a Message Synchronously
+
+    - Sending a message synchronously is simple, but allows the producer to catch exceptions when
+        Kafka returns an error or send retries are exhausted.  The tradeoff is a performance hit from
+        blocking.
+
+
+    - To send a message synchronously:
+
+        ProducerRecord<String, String> record =
+            new ProducerRecord<>("CustomerCountry", "Precision Products", "France");
+
+        try {
+            producer.send(record).get();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+
+    - 'KafkaProducer' has 2 types of errors:
+
+        1. 'Retriable' errors that can be resolved by sending the message again
+        2. Errors that cannot be resolved by retry like the message being too big
+
+
+
+- Sending a Message Asynchronously
+
+    - To send messages asynchronously and still handle error scenarios, we can use callbacks.
+
+        private class DemoProducerCallback implements Callback {
+            @Override
+            public void onCompletion(RecordMetadata recordMetadata, Exception e) {
+                if (e != null) {
+                    e.printStackTrace();
+                }
+            }
+        }
+
+        ProducerRecord<String, String> record =
+            new ProducerRecord<>("CustomerCountry", "Biomedical Materials", "USA");
+
+        producer.send(record, new DemoProducerCallback());
+
+
+
+- Configuring Producers
+
+    - Configuration parameters for producers:
+
+        client.id              # Logical id for client, makes log tracing much easier
+
+        acks                   # Number of replicas that must receive a record before write is
+                               #   considered successful
+                               #
+                               #   acks=0             # Fire and forget
+                               #   acks=1             # Leader receives message (default)
+                               #   acks=all           # All in sync replicas receive the message
+
+
+    - The Producer has multiple configuration parameters that control how much time to wait until
+        we give up on a 'send()' call.  
+
+        max.block.ms           # Max amount of time to block on send()
+
+        delivery.timeout.ms    # Max amount of time to spend sending and retrying
+
+        request.timeout.ms     # Max amount of time to wait on reponse from server on a single try
+
+        retries                # Number of retries
+
+        retry.backoff.ms       # Time to wait between retries (100 ms by default)
+
+
+    - Other important configuration parameters:
+
+        linger.ms              # Amount of time to wait for additional messages before sending batch
+
+        buffer.memory          # Amount of memory to use buffering messages before sending
+
+        compression.type       # Can use snappy, gzip, lz4, or zstd (none by default)
+
+        batch.size             # Amount of memory (in bytes) used for each batch before sending
+
+        max.in.flight.requests.per.connection   # Number of messages producer will send to server 
+                                                #   without receiving responses
+
+        max.request.size       # Maximum size of entire batch of messages
+
+        receive.buffer.bytes   # Sizes of TCP send and receive buffers used by sockets when sending
+        send.buffer.bytes      #   and receivig data
+
+        enable.idempotence     # Used to support exactly-once semantics, producer will attach 
+                               #   sequence number that Kafka will use to reject duplicates
+                               #
+                               # Note that enabling this also requires:
+                               #   max.in.flight.requests.per.connection = 5 or less
+                               #   retries = 1 or greater
+                               #   acks = all
+
+
+
+- Serializers
+
+
+- Partitions
+
+
+- Headers
+
+
+- Interceptors
+
+
+- Quotas and Throttling
