@@ -4,8 +4,10 @@
 
 - Apache Kafka
 
-    - 70% of Fortune 500 Companies
-    - There are systems for data at rest, Kafka is foundation for platforms for data in motion
+    - Used by 70% of Fortune 500 Companies
+
+    - There are systems for data at rest, Kafka is foundation for platforms for data in motion.
+
     - Streaming platform = subscribe to streams of data, store them, process them
 
 
@@ -13,8 +15,9 @@
 - Kafka gets compared to
 
     1. RabbitMQ-like messaging systems
-    2. 'real-time version of Hadoop'
+    2. 'Real-time version of Hadoop'
     3. ETL or data integration tools
+
 
     - Differences from RabbitMQ-type systems
         1. Massive company-wide scale (run one queue instead of a bunch of them)
@@ -34,7 +37,9 @@
 - Popular use cases:
 
     1. Message bus for event-driven microservices
+
     2. Stream processing applications
+
     3. Large-scale data pipelines
 
 
@@ -42,89 +47,242 @@
 - Pub/Sub Messaging
 
     - Broker decouples sender from receiver
+
     - Kafka = "distributed commit log" that can be replayed to consistently rebuild state
 
 
 
 - Messages
 
-    - Message is just array of bytes, has no meaning to Kafka
-    - Optional key also has no meaning to Kafka
-    - Keys are used when message need to be written to partitions in a more controlled manner
-        (Easiest way: generate consistent hash of key, % num_partitions)
-    - Messages are written in batches for efficiency
+    - A message is just array of bytes, which has no meaning to Kafka.
+
+
+    - An optional key in the message metadata also has no meaning to Kafka.
+
+
+    - Keys are used when message need to be written to partitions in a more controlled manner.
+
+      The easiest way to partition data is to generate consistent hash of key, % num_partitions, as 
+        long as the num_partitions doesn't change.
+
+
+    - Messages are written in batches for efficiency.  A 'batch' is a collection of messages for the
+        same topic and partition.
+
+      There is a tradoff between latency and throughput.  The larger the batch, the higher the latency
+        and throughput.
 
 
 
 - Schemas
 
-    - Even though Kafka doesn't care, it's a good idea to use schemas
-    - Simple options like JSON or XML work, but lack types and versioning
-    - Avro (serialization framework originally developed for Hadoop) is preferred
+    - Even though Kafka doesn't care, it's a good idea to use schemas.
+
+
+    - Simple options like JSON or XML work, but lack types and versioning.
+
+
+    - Avro (serialization framework originally developed for Hadoop) is preferred by many Kafka
+        developers.  Avro provides a compact serialization format, schemas are separate from message
+        payloads and do not require code generation when they change, strong data typing and schema
+        evolution, and backward and forward compatibility.
+
+
+    - A consistent data format is important in Kafka, as it allows writing and reading messages to be
+        decoupled.  By using well-defined schemas and storing them in a common repository, changes in 
+        producers and consumers don't have to be released together.
 
 
 
 - Topics and Partitions
 
-    - Messages are broken down into topics
-    - Topics have multiple partitions, ordering in a topic is guaranteed only across partition
-    - Partitions provide scaling
-    - Partitions can be replicated
-    - A 'stream' is usually considered to be a topic, regardless of the number of partitions
+    - Messages are broken down into topics.  Topics have multiple partitions, and ordering in a topic is 
+        guaranteed only across partitions.
+
+
+    - Partitions provide scaling and can be replicated.
+
+
+    - A 'stream' is usually considered to be a topic, regardless of the number of partitions.  This
+        represents a single stream of data moving from producers to consumers.
+
+      This way of referring to messages is common when discussing 'stream processing', which is when
+        frameworks (ie Kafka Streams, Apache Samza, Storm) operate on messages in real time.
 
 
 
 - Producers and Consumers
 
-    - 2 types of clients
-    - There are also advanced client APIs (Kafka Connect and Kakfa Streams) built on top
-    - By default messages are distributed to all partitions, but can control using key
-    - Consumers read messages in order by keeping track of offset
-    - Consumers work as part of a consumer group (one or more consumers consuming a topic)
-    - Mapping of consumer to partition is called 'ownership' of partition by consumer
-    - If consumer fails, remaining consumers will reassign partition to take over
+    - There are 2 types of clients: Producers and Consumers.  There are also advanced client APIs (Kafka 
+        Connect and Kakfa Streams) built on top of these.
+
+
+    - Producers create new messages.  By default, messages are distributed evenly across all partitions, 
+        but we can control this using a key.  In this case, we use a partitioner that will hash a key
+        and map it to a specific partition.  This ensure all messages for a given key go to the same
+        partition.
+
+      We can also create a custom partitioner that will map messages according to partitions using some
+        other business logic.
+
+
+    - The consumer keeps track of which messages it has already consumed by keeping track of the offset 
+        of messages.  The 'offset', an integer value that continually increases, is another piece of 
+        metadata that Kafka adds to each message as it is produced. 
+
+      Each message in a given partition has a unique offset, and the following message has a greater offset
+        (though not necessarily monotonically greater).  By storing the next possible offset for each 
+        partition, typically in Kafka itself, a consumer can stop and restart without losing its place.
+
+
+    - Consumers work as part of a consumer group (one or more consumers consuming a topic).  The mapping 
+        of consumer to partition is called 'ownership' of partition by consumer.
+
+
+    - If consumer fails, remaining consumers will reassign the partition to take over.
 
 
 
 - Brokers and Clusters
 
-    - A single Kafka server is a 'broker'
-    - Broker receives messages from producers, assigns them an offset, and writes them to disk
-    - Broker also responds to fetch requests for partitions
-    - Single broker can handle millions of messages per second
-    - Brokers are designed to operate as part of a cluster
-    - One broker is cluster controller, responsible for admin functions, called 'leader'
-    - A replicated partition is assigned to other brokers called 'followers'
-    - All producers must connect to leader to publish messages
-    - Consumers can fetch from any follower
-    - Replication provides redundancy of messages in the partition
-    - MirrorMaker project allows you to have multiple clusters
+    - A single Kafka server is called a 'broker'.  The Broker receives messages from producers, assigns
+        them an offset, and writes them to disk.
+
+      The broker also services consumers, responding to fetch requests for partitions and responding
+        with the messages that have been published.  A single broker can handle millions of messages 
+        per second.
+
+
+    - Brokers are designed to operate as part of a cluster.  One broker functions as the 'cluster 
+        controller', responsible for administrative operations, including assigning partitions to 
+        brokers and monitoring for broker failures.
+
+
+    - A partition is owned by a single broker in the cluster, and that broker is called the 'leader' of
+        the partition.  A replicated partition is assigned to additional brokers, called 'followers' of
+        the partition.  Replication provides redundancy, and a follower can take over as leader of
+        the partition in the event of a broker failure.
+
+
+    - All producers must connect to leader in order to publish messages, but consumers may fetch from
+        either the leader or one of the followers.
+
+
+    - Kafka has configurable retention based on either time (ie 7 days) or size (ie 10 GB).  Once these
+        limits are reached, messages are expired and deleted.
+
+      Individual topics can be configured with their own retention settings.
+
+
+    - Topics can also be configured as 'log compacted', which means only the last message produced with
+        a specific key is retained.  This can be useful for changelog-type data, where only the last
+        update is interesting.
+
+
+
+- Multiple Clusters
+
+    - As Kafka grows, it is often advantageous to have multiple clusters.  There are several reasons for
+        this:
+
+        1. Segregation of the types of data
+
+        2. Isolation for security requirements
+
+        3. Multiple datacenters for disaster recovery
+
+
+    - The replication mechanisms in Kafka are designed to work within a single cluster, not multiple
+        clusters.
+
+
+    - The Kafka project includes a tool called 'MirrorMaker', which is used to replicate data to other
+        clusters.  At it's core, MirrorMaker is simply a Kafka consumer and producer, linked together
+        with a queue.
 
 
 
 - Why Kafka?
 
-    - Multiple producers produce messages, don't worry about clients
-    - Consumers can read without interfering with each other, can consume whenever
-    - Disk-based retention
-    - Scalability (to hundreds of brokers)
-    - Subsecond latency from producer to consumer, even in big clusters
-    - Lots of platform features and extensions
+    - Handling multiple producers makes the system ideal for aggregating data from many frontend systems
+        and making it consistent.
+
+
+    - Multiple consumers can read any single stream of messages without interfering with any other client.
+        In many other queueing systems, once a message is consumed by a single client, it is not
+        available to other clients.  Consumer groups can share a stream, ensuring the entire group only
+        processes a given message once.
+
+
+    - Durable retention means that consumers don't always have to work in real time.  If a consumer
+        falls behind due to a burst in traffic, there is no danger of losing data.  Maintenance can
+        be performed on consumers without worrying about message loss.
+
+
+    - Kafka's flexible scalability means that any amount of data can be handled.  Expansions can be
+        performed while the cluster is online.  A cluster of multiple brokers means that an individual
+        broker failure will not stop clients from being serviced.
+
+
+    - All these features come together to enable excellent performance under a very high load.  Producers,
+        consumers, and brokers can be scaled out to handle very large streams with ease.  This can be
+        done while providing subsecond latency between producers and consumers.
+
+
+    - Kafka has added streaming platform features that make developers' lives much easier.  Kafka
+        Connect assists with pulling data and pushing it.  Kafka Streams provides a library for easily
+        developing stream processing applications that are scalable and fault tolerant.
 
 
 
 - Use Cases
 
     1. User activity tracking at LinkedIn was original use case
+
     2. Messaging applications
+
     3. Metrics and logging (could route log messages to ElasticSearch or security apps)
+
     4. Commit log (Can publish DB changes and use commit log to replicate)
+
     5. Stream processing (aggreations like counts, transformations of messages)
 
 
 
-- Kafka
+- Kafka History
 
-    - Solved problem of moving data around at LinkedIn
-    - Pub/sub system, interface like messaging system, but storage engine like log aggregation system
-    - Open source in 2010, ASF in 2011
+    - Kafka was designed to address the data pipeline problem at LinkedIn.  It was designed to provide a 
+        high-performance messaging system that can handle many types of data and provide clean, 
+        structured data about user activity and system metrics in real time.
+
+
+    - LinkedIn had clunky systems for both monitoring and metrics of services, and also for user
+        activity tracking.  They wanted to merge them into a single system.  They tried using ActiveMQ,
+        but it couldn't handle the load.  So they decided to build custom infrastructure.
+
+
+    - The development team at LinkedIn was led by Jay Kreps, who previously created the Voldemort 
+        key/value store.  The teams primary goals were:
+
+        - Decouple producers and consumers by using a push-pull model
+
+        - Provide persistence to allow multiple consumers
+
+        - Optimize for high throughput of messages
+
+        - Allow for horizontal scaling of the system
+
+
+    - The result was a pub/sub system that had an interface typical of messaging systems, but a storage
+        layer more like a log aggregation system.
+
+      Combined with Apache Avro for message serialization, Kafka was effective for handling both
+        metrics and user-activity tracking at the scale of billions of messages per day.
+
+
+    - Kafka was Open sourced in 2010, became an ASF incubator project in 2011, then became a top-level
+        ASF project in 2012.
+
+
+    - In 2014, Jay Kreps, Neha Narkhede, and Jun Rao left LinkedIn to found Confluent, a company centered
+        around providing development, enterprise support, and training for Apache Kafka.
