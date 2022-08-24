@@ -9,6 +9,16 @@
         clients have been created as well.
 
 
+    - Common Use Cases for Producers
+
+        - Recording user activities for auditing or analysis
+        - Recording metrics
+        - Storing log messages
+        - Recording information from smart appliances
+        - Communicating asynchronously with other applications
+        - Buffering information before writing to an application
+
+
     - For every use case we should ask ourselves:
 
         1. Is every message critical, or can we tolerate loss of messages?
@@ -53,6 +63,34 @@
 
 
 
+                                ProducerRecord[Topic, Value, (Partition), (Key)]
+                                                      |
+                                                    Send()
+                                                      |
+                                                      V
+                                                  Serializer
+                                                      |
+                                                      V
+                             ^                   Partitioner
+                             |                        |
+                           Exception       -------------------------
+                             |             |                       |
+                            No             V                       V
+                             |         Topic A                  TopicB
+                     ^       |  Yes--->Partition 0              Partition 1
+                     |       |   |     ------------             ------------
+                  Return     Retry?    Batch 0                  Batch 0
+                Metadata       |       Batch 1                  Batch 1
+                     |        Yes      Batch 2                  Batch 2
+                     |         |          |                       |
+                     No------Fail?        -------------------------
+                               |                      |
+                               |                      V
+                               |-----------------Kafka Broker
+
+
+
+
 - Constructing a Kafka Producer
 
     - First, we need to create a producer object with the properties we want to pass to the producer.
@@ -65,6 +103,18 @@
         key.serializer                     # Name of class used to serialize keys
 
         value.serializer                   # Name of class used to serialize values
+
+
+    - The standard Kafka serializers are:
+
+        ByteArraySerializer                # Doesn't do much
+        StringSerializer
+        IntegerSerializer
+
+
+
+    - Note that you still have to set the 'KeySerializer' even if you only intend to send values.  In
+        that case, you can use the 'VoidSerializer'.
 
 
     - Here is an example of the most basic configuration:
@@ -113,7 +163,7 @@
 
 - Sending a Message Synchronously
 
-    - Sending a message synchronously is simple, but allows the producer to catch exceptions when
+    - Sending a message synchronously is simple, and allows the producer to catch exceptions when
         Kafka returns an error or send retries are exhausted.  The tradeoff is a performance hit from
         blocking.
 
@@ -135,9 +185,23 @@
         1. 'Retriable' errors that can be resolved by sending the message again
         2. Errors that cannot be resolved by retry like the message being too big
 
+      The KafkaProducer can be configured to retry automatically if a retriable error is received.
+
 
 
 - Sending a Message Asynchronously
+
+    - Blocking synchronously on every message sent will cause a drastic performance penalty.  On the
+        other hand, if we just send all our messages without waiting for replies, it will be much
+        faster.
+
+      In most cases, we don't actually need a reply.  Kafka sends back the topic, partition, and offset
+        of the record that was written.  Most applications don't need this information.
+
+
+    - On the other hand, we do need to know when we failed to send a message completely, so we can throw
+        an exception, log an error, or write to an 'errors' file for later analysis.
+
 
     - To send messages asynchronously and still handle error scenarios, we can use callbacks.
 
@@ -161,7 +225,7 @@
 
     - Configuration parameters for producers:
 
-        client.id              # Logical id for client, makes log tracing much easier
+        client.id              # Logical id for client, makes log tracing much easier, can be any string
 
         acks                   # Number of replicas that must receive a record before write is
                                #   considered successful
@@ -171,10 +235,50 @@
                                #   acks=all           # All in sync replicas receive the message
 
 
-    - The Producer has multiple configuration parameters that control how much time to wait until
-        we give up on a 'send()' call.  
+    - Note that the 'acks' is a tradeoff for Producer latency, not end-to-end latency.  In order to
+        maintain consistency, Kafka will not allow consumers to read records until all in-sync
+        replicas.  So the end-to-end latency is the same whether 'acks' is 0, 1, or 'all'.
 
-        max.block.ms           # Max amount of time to block on send()
+
+
+- Message Delivery Configuration
+
+    - The Producer has multiple configuration parameters that control how much time to wait until
+        we give up on a 'send()' call.
+
+      
+    - Since Kafka 2.1, we divide the time spent sending a ProducerRecord into 2 time intervals that
+        are handled separately:
+
+        1. Time until an async call to 'send()' returns.  During this interval, the thread that called
+             'send()' will be blocked.
+
+        2. From the time an async call to 'send()' returned successfully until the callback is triggered
+             (success or failure).
+
+
+          max.block.ms
+        |----------------|  linger.ms
+                         |-------------|
+                                       |---------|  retry.backoff.ms
+                                                 |--------------------|  request.timeout.ms
+                                                                      |-----------------------|
+
+                                                delivery.timeout.ms 
+                         |--------------------------------------------------------------------|
+
+
+        |     send()     |  Batching   | Await   |   Retries          |  Inflight             |
+                                         send
+
+
+
+    - Note that: delivery.timeout.ms >= (linger.ms + retry.backoff.ms + request.timeout.ms)
+
+
+    - Here is a description of the delivery config parameters:
+
+        max.block.ms           # Max amount of time to block on send(), exception is thrown when reached
 
         delivery.timeout.ms    # Max amount of time to spend sending and retrying
 
@@ -185,7 +289,22 @@
         retry.backoff.ms       # Time to wait between retries (100 ms by default)
 
 
-    - Other important configuration parameters:
+    - In general, there is no point in handling retries in application logic, since the Producer does
+        it for you.  Focus your efforts on handling nonretriable errors or cases where retry attempts
+        were exhausted.
+
+
+    - Some cases are extremely sensitive to ordering guarantees.  For instance, you want a message
+        depositing $100 to arrive before a message withdrawing $100.
+
+      Kafka guarantees ordering in a partition, but retries could cause events to arrive out of order.
+        If you need to guarantee order, the best way is to send 'enable_idempotence=true'.  This
+        guarantees order for up to 5 in-flight requests, and also guarantees retries will not
+        introduce duplicates.
+
+
+
+- Other important configuration parameters:
 
         linger.ms              # Amount of time to wait for additional messages before sending batch
 
@@ -201,7 +320,7 @@
         max.request.size       # Maximum size of entire batch of messages
 
         receive.buffer.bytes   # Sizes of TCP send and receive buffers used by sockets when sending
-        send.buffer.bytes      #   and receivig data
+        send.buffer.bytes      #   and receiving data
 
         enable.idempotence     # Used to support exactly-once semantics, producer will attach 
                                #   sequence number that Kafka will use to reject duplicates
