@@ -106,41 +106,303 @@
 
 - Configuring Consumers
 
+    - The consumer API uses a simple poll loop for polling the server for more data.
+
+        Duration timeout = Duration.ofMillis(100);
+
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(timeout);
+
+            for (ConsumerRecord<String, String> record : records) {
+                System.out.printf("topic = %s, partition = %d, offset = %d, " 
+                    + "customer = %s, country = %s\n",
+                    record.topic(), 
+                    record.partition(), 
+                    record.offset(),
+                    record.key(), 
+                    record.value());
+
+                int updatedCount = 1;
+
+                if (custCountryMap.containsKey(record.value())) {
+                    updatedCount = custCountryMap.get(record.value()) + 1;
+                }
+
+                custCountryMap.put(record.value(), updatedCount);
+
+                JSONObject json = new JSONObject(custCountryMap);
+                System.out.println(json.toString());
+            }
+        }
+
+
+    - The 'poll()' method returns a list of records.  The 'timeout' controls how long it will block
+        if data is not available.  If this is set to 0 or there are records available, it returns
+        immediately.  Otherwise, it will wait the specified ms.  A consumer must keep polling or it
+        will be considered dead.
+
+
+    - Processing usually ends in writing to a data store or updating a stored record.  Here, we are
+        keeping a running count of customers from each country, so we update a hash table and print
+        the result as JSON.  A more realistic example would update results in a data store.
+
+
+    - The first time a consumer polls is when they get a partition assignment.  If a rebalance is
+        triggered, it will happen inside the poll loop as well.
+
+
+    - If a poll is not invoked for longer than 'max.poll.interval.ms', the consumer will be considered
+        dead and evicted from the consumer group.  So, we should avoid doing anything that can block
+        for unpredictable intervals in the poll loop.
+
+
+    - For safety reasons, we should only have one consumer per thread.  If we want to use multiple
+        threads, each should have it's own consumer.
+
+
+
+- Configuring Consumers
+
+    fetch.min.bytes                         # Min amount of data to receive in a single poll
+
+    fetch.max.wait.ms                       # How long to wait if you're waiting for min amount of data
+
+    fetch.max.bytes                         # Max bytes in a single poll
+
+    max.poll.records                        # Max number of records in a single poll
+
+    max.partition.fetch.bytes               # Max bytes per partition
+
+    session.timeout.ms                      # Max time with no communication before consumer considered dead
+
+    heartbeat.interval.ms                   # How frequent to set heartbeat
+
+    max.poll.interval.ms                    # Max time with no poll before consumer considered dead
+
+    default.api.timeout.ms                  # Max time before API calls (not poll) time out
+
+    request.timeout.ms                      # Max time consumer waits for response from broker
+
+    auto.offset.reset                       # Default offset to read from at startup (default: latest)
+
+    enable.auto.commit                      # Whether consumer will commit offsets automatically
+
+    partition.assignment.stragegy           # Range(default), RoundRobin, Sticky, or Cooperative Sticky
+
+    client.id                               # Can be any string, used for logging and quotas
+
+    client.rack                             # Used to enable closest fetching
+
+    group.instance.id                       # Any unique string, used for static membership
+
+    receive.buffer.bytes                    # Sizes of TCP send and receive buffers
+    send.buffer.bytes
+
+    offsets.retention.minutes               # Broker configuration for retention
+
+
 
 - Commits and Offsets
+
+    - When we call 'poll()', it returns records we have not read yet.  To track what we have read,
+        consumers use Kafka to keep track of their offset in each partition.
+
+
+    - We call the action of updating the current position in the partition an 'offset commit'.  Consumers
+        commit the last message they've successfully processed from a partition and implicitly assume
+        every message before was also successfully processed.
+
+
+    - A consumer commits an offset by sending a message to Kafka, which updates a '_consumer_offsets'
+        topic with the committed offset for each partition.
+
+
+    - If a consumer exits or enters the consumer group, a rebalance is triggered.  In order to know
+        where to pick up, the consumer will read the latest committed offset from each of the partitions
+        it's assigned an pick up from there.
+
+
+    - If the committed offset is smaller than the offset of the last message processed, the messages
+        between them will be processed twice.
+
+      If the committed offset is larger than the offset of the last message processed, the messages
+        between them will be missed.
+
+
+    - By default, the committed offset is the last offset that was returned by 'poll()'.  Since this has
+        such a large impact on client applications, there are several ways to manage it.
+
 
 
 - Automatic Commit
 
+    - The easiest way to commit offsets is to allow the consumer to do it for you.  If you enable
+        'enable.auto.commit=true', then every 5 seconds, the consumer will commit the latest offset that
+        your client received from 'poll()'.  That interval can be set with 'auto.commit.interval.ms'.
+
+
+    - Just like other consumer things, automatic commits are driven by the poll loop.  Whenever you poll,
+        the consumer checks if it's time to commit, and will commit if it is.
+
+
+    - Note that this method leaves open the possibility of duplicated processing.
+
+
+    - Like the 'poll()' method, calling the 'close()' method (when the poll loop is exited) also commits
+        offsets automatically.
+
+
 
 - Commit Current Offset
+
+    - We can also commit the current offset to eliminate the possibility of duplicated or missed messages.
+        In this case, we set 'enable.auto.commit=false', and the offsets will only be committed when the
+        application explicitly does so.
+
+
+    - The simplest and most reliable way to do this is to call 'commitSync()'.  An exception will be
+        thrown if the commit fails for some reason.
+
+
+    - Remember that 'commitSync()' commits the latest offset returned by 'poll()', so if you call
+        'commitSync()' before you process all the records, you risk missing messages if the application
+        crashes.
+
+      If the call 'commitSync()' after you process all the messages, and the application crashes during
+        processing, you risk duplicated messages.
+
+
+    - Here, we commit offsets after processing the latest batch of messages:
+
+        Duration timeout = Duration.ofMillis(100);
+
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(timeout);
+
+            for (ConsumerRecord<String, String> record : records) {
+                System.out.printf("topic = %s, partition = %d, offset =
+                    %d, customer = %s, country = %s\n",
+                    record.topic(),
+                    record.partition(),
+                    record.offset(),
+                    record.key(),
+                    record.value());
+            }
+
+            try {
+                consumer.commitSync();
+            } catch (CommitFailedException e) {
+                log.error("commit failed", e)
+            }
+        }
+
 
 
 - Asynchronous Commit
 
+    - One drawback of manual commit is that the application is blocked until the broker resonds to the
+        commit request.  This will limit the throughput of the application.  Another option is to use
+        asynchronous commit.  We just send the commit request and continue on:
+
+        Duration timeout = Duration.ofMillis(100);
+
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(timeout);
+
+            for (ConsumerRecord<String, String> record : records) {
+                System.out.printf("topic = %s, partition = %s,
+                    offset = %d, customer = %s, country = %s\n",
+                    record.topic(),
+                    record.partition(),
+                    record.offset(),
+                    record.key(),
+                    record.value());
+            }
+
+            consumer.commitAsync();
+        }
+
+
+    - The drawback is that 'commitAsync()' will not retry if it fails.  This is because we can't have
+        commits coming in out of order.  We can use a callback with 'commitAsync()' to log errors, but
+        we should be very careful when using it for retries.
+
+        consumer.commitAsync(new OffsetCommitCallback() {
+            public void onComplete(Map<TopicPartition, OffsetAndMetadata> offsets, Exception e) {
+                if (e != null)
+                    log.error("Commit failed for offsets {}", offsets, e);
+            }
+        });
+
+
+    - If we did want to retry, we could keep track of the largest offset in our application, and only
+        monotonically increase it.
+
+
 
 - Combining Synchronous and Asynchronous Commits
+
+    - One compromise is to make asynchronous commits, but make a synchronous call before we close a
+        consumer or rebalance.
+
+        try {
+            while (!closing) {
+                ConsumerRecords<String, String> records = consumer.poll(timeout);
+
+                for (ConsumerRecord<String, String> record : records) {
+                    System.out.printf("topic = %s, partition = %s, offset = %d,
+                        customer = %s, country = %s\n",
+                        record.topic(),
+                        record.partition(),
+                        record.offset(),
+                        record.key(),
+                        record.value());
+                }
+                consumer.commitAsync();
+            }
+            consumer.commitSync();
+        } catch (Exception e) {
+            log.error("Unexpected error", e);
+        } finally {
+            consumer.close();
+        }
+
 
 
 - Committing a Specified Offset
 
-
-- Rebalancing Listeners
-
-
-- Consuming Records with Specific Offsets
+    - Committing the latest offset only allows you to commit as often as you finish processing batches.
+        We may want to commit more frequently, for instance if 'poll()' returns a huge batch and we want
+        to avoid reprocessing if a rebalancing occurs.
 
 
-- But How Do We Exit?
+    - The 'commitSync()' and 'commitAsync()' allow you to pass a map of partitions and offsets you want
+        to commit.  Here, we commit offsets every 1000 records:
 
 
-- Deserializers
+        private Map<TopicPartition, OffsetAndMetadata> currentOffsets = new HashMap<>();
+        int count = 0;
+        ....
+        Duration timeout = Duration.ofMillis(100);
 
+        while (true) {
+            ConsumerRecords<String, String> records = consumer.poll(timeout);
 
-- Custom Deserializers
+            for (ConsumerRecord<String, String> record : records) {
+                System.out.printf("topic = %s, partition = %s, offset = %d,
+                    customer = %s, country = %s\n",
+                    record.topic(),
+                    record.partition(),
+                    record.offset(),
+                    record.key(),
+                    record.value());
 
+                currentOffsets.put(
+                    new TopicPartition(record.topic(), record.partition()),
+                    new OffsetAndMetadata(record.offset()+1, "no metadata"));
 
-- Using Avro Deserialization with Kafka Consumer
-
-
-- Standalone Consumer: Why and How to Use a Consumer Without a Group
+                if (count % 1000 == 0)
+                    consumer.commitAsync(currentOffsets, null);
+                    count++;
+            }
+        }
