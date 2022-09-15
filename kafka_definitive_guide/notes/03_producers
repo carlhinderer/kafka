@@ -532,11 +532,97 @@
 
 - Partitions
 
+    - Most applications produce records with keys, since they are used to make decisions on partitioning.
+        To create a key-value record:
+
+        ProducerRecord<String, String> record =
+            new ProducerRecord<>("CustomerCountry", "Laboratory Equipment", "USA");
+
+
+    - To omit the key (causing it to be set to null):
+
+        ProducerRecord<String, String> record = new ProducerRecord<>("CustomerCountry", "USA");
+
+
+    - If there is no key, messages will be sent to all partitions of a topic round-robin.
+
+
+    - If a key is present, and the default partitioner is used, Kafka will hash the key (using a persistent
+        algorithm), and mod it by the number of partitions.  Note that it is consistent as long as the
+        number of partitions does not change, so the easiest solution is to create topics with a
+        sufficient number of partitions and never add partitions.
+
+
+    - You can also create a custom partitioner, for instance if you have one customer that is so large
+        it skews the default partitioning.
+
+        import org.apache.kafka.clients.producer.Partitioner;
+        import org.apache.kafka.common.Cluster;
+
+        public class MyPartitioner implements Partitioner {
+            public void configure(Map<String, ?> configs) {}
+
+            public int partition(String topic, Object key, byte[] keyBytes,
+                                 Object value, byte[] valueBytes, Cluster cluster) {
+                ...
+            }
+
+            public void close() {}
+        }
+
+
 
 - Headers
+
+    - In addition to a key and value, a record can also include headers.  The headers give you the 
+        ability to add metadata without adding extra information to the key-value pair.
+
+
+    - Headers are often used to indicated the source of the data in the record, and for routing and
+        tracing (perhaps the message is encrypted and the router doesn't have permission to access the
+        data).
+
+
+    - Headers are a key-value pair.  The key is a string, and the values can be any serialized object.
+
+        ProducerRecord<String, String> record =
+            new ProducerRecord<>("CustomerCountry", "Precision Products", "France");
+
+        record.headers().add("privacy-level","YOLO".getBytes(StandardCharsets.UTF_8));
+
 
 
 - Interceptors
 
+    - There are times when you want to modify the behavior of your client application without modifying
+        the code itself, possibly because you don't have access to it.
+
+
+    - The 'ProducerInterceptor' has 2 key methods:
+
+        # Called before the record is serialized so it can be modified
+        ProducerRecord<K, V> onSend(ProducerRecord<K, V> record)
+
+        # Called when ack is received so you can capture information about the response
+        void onAcknowledgement(RecordMetadata metadata, Exception exception)
+
+
+    - Common uses include capturing monitoring and tracing information, enhancing a message with headers,
+        and redacting sensitive information.
+
+
 
 - Quotas and Throttling
+
+    - Kafka can limit the rate at which messages are produced and consumed using 'quotas'.  
+
+        1. 'Produce quotas' limit the rate clients can send data (in bytes/s)
+        2. 'Consume quotas' limit the rate clients can receive data
+        3. 'Request quotas' limit the percentage of time the broker spends processing requests
+
+
+    - These limits can also be applied on a per-client bases.
+
+
+    - Quotas in Kafka's config file are static, so they can only be changed by restarting all the brokers.
+        The usual method of changing them is to use the 'AdminClient API'.
