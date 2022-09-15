@@ -1,0 +1,146 @@
+----------------------------------------------------------------------------
+|  CHAPTER 4 - KAFKA CONSUMERS                                             |
+----------------------------------------------------------------------------
+
+- Consumers and Consumer Groups
+
+    - An application will have a consumer, which will subscribe to a topic, and start receiving messages,
+        validating them, and writing the results.  Eventually, the pace of records produced will exceed
+        the rate at which you can consume and process them.
+
+
+    - To scale up the number of consumers, we use 'consumer groups', which consume the same topic by
+        reading from a subset of partitions.
+
+
+    - One partition can only be read by a single consumer to preserve ordering, so if we have more
+        consumers than partitions some will sit idle.  This is a good reason to create topics with a
+        large number of partitions.
+
+
+    - We can have multiple consumer groups reading the same topic.  For instance, if several applications
+        want to read all messages in a topic, they can each have their own consumer group.
+
+
+
+- Consumer Groups and Partition Rebalance
+
+    - If consumers are added to or removed from a consumer group, partitions are rebalanced.  Rebalances
+        are important for HA and scalability, but in the normal course of events they can be undesirable.
+
+
+    - There are 2 types of rebalances, 'Eager' and 'Cooperative',  With Eager rebalances, all consumers
+        stop consuming, give up their ownership of partitions, rejoin the consumer group, and get a
+        brand new partition assignment.
+
+
+    - With Cooperative rebalances, only a small subset of partitions is reassigned.  The consumer group
+        leader informs all consumers to give up a subset of partitions, they those partitions are
+        reassigned.
+
+
+    - Consumers maintain membership in a consumer group by sending heartbeats to a broker designated as
+        the 'Group Coordinator'.  If a consumer stops sending heartbeats for long enough, the 
+        Coordinator assumes it dead and triggers a rebalance.
+
+
+
+- Static Group Membership
+
+    - By default, consumers have a transient ID that is assigned when they join a group.  This is true
+        unless you configure a consumer with a unique 'group.instance.id', which makes the consumer
+        a 'static member' of the group.
+
+
+    - When a consumer joins a group, it is handed partitions normally.  However, when it leaves, it
+        remains a member of the group until a session timeout.  If it comes back up before the timeout,
+        it is reassigned the same partitions it had before, without triggering a rebalance.
+
+
+    - If 2 consumers join a group with the same 'group.instance.id', the second one will get an error.
+
+
+    - Static group membership is useful if your application maintains some local state or cache specific
+        to individual partitions.  However, the partitions are blocked from consumption during the
+        session timeout, so the consumer will have to catch up with the lag if it restarts.  Also,
+        the session timeout needs to be chosen carefully.
+
+
+
+- Creating a Kafka Consumer
+
+    - To start consuming, we need to provide 3 mandatory properties:
+
+        - bootstrap.servers
+        - key.deserializer
+        - value.deserializer
+
+      Also, we can provide a 'group.id', which specifies the consumer group.  Creating consumers without
+        a group is uncommon, so we will usually provide one.
+
+
+    - To create a consumer:
+
+        Properties props = new Properties();
+        props.put("bootstrap.servers", "broker1:9092,broker2:9092");
+        props.put("group.id", "CountryCounter");
+        props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put("value.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+
+        KafkaConsumer<String, String> consumer = new KafkaConsumer<String, String>(props);
+
+
+
+- Subscribing to Topics
+
+    - Once we create a consumer, we can subscribe to one or more topics.
+
+        consumer.subscribe(Collections.singletonList("customerCountries"));
+
+
+    - We can also use a regular expression to subscribe to a set of topics:
+
+        consumer.subscribe(Pattern.compile("test.*"));
+
+
+
+- Configuring Consumers
+
+
+- Commits and Offsets
+
+
+- Automatic Commit
+
+
+- Commit Current Offset
+
+
+- Asynchronous Commit
+
+
+- Combining Synchronous and Asynchronous Commits
+
+
+- Committing a Specified Offset
+
+
+- Rebalancing Listeners
+
+
+- Consuming Records with Specific Offsets
+
+
+- But How Do We Exit?
+
+
+- Deserializers
+
+
+- Custom Deserializers
+
+
+- Using Avro Deserialization with Kafka Consumer
+
+
+- Standalone Consumer: Why and How to Use a Consumer Without a Group
