@@ -1,5 +1,5 @@
 ----------------------------------------------------------------------------
-|  A - BUILDING AN APACHE KAKFA CLUSTER                                    |
+|  A - USING KAFKA-PYTHON                                                  |
 ----------------------------------------------------------------------------
 
 - Producing Messages with kafka-python
