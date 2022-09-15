@@ -406,3 +406,207 @@
                     count++;
             }
         }
+
+
+
+- Rebalancing Listeners
+
+    - If you know your consumer is about to lose ownership of a partition, you will want to commit the
+        offset of the last message you processed.  You may also want to close file handles or database
+        connections, etc.
+
+
+    - The Consumer API allows you to receive notifications so you can do this.  You pass a 
+        'ConsumerRebalanceListener' when calling the 'subscribe()' method, and you can implement these
+        3 methods:
+
+        # Called after partitions have been reassigned but before consuming starts
+        public void onPartitionsAssigned(Collection<TopicPartition> partitions)
+
+        # Called when consumer has to give up partitions it previously owned
+        public void onPartitionsRevoked(Collection<TopicPartition> partitions)
+
+        # Only called when a cooperative rebalancing algorithm is used
+        public void onPartitionsLost(Collection<TopicPartition> partitions)
+
+
+
+- Consuming Records with Specific Offsets
+
+    - So far, we have used 'poll()' to start consuming messages from the last committed offset in each
+        partition and to proceed in processing all messages in sequence.  We can also use a varity of
+        methods to start consuming at a different offset.
+
+
+    - We can use the 'seekToBeginning' method to start reading all messages from the beginning of the
+        partition.  We can use 'seekToEnd' to start consuming only new messages.
+
+
+    - We can also seek a specific offset.  For instance, a consumer could be reset back to a specific
+        point in time in order to recover data that was lost.
+
+
+    - Here, we set the current offset on all partitions to records that were produced at a specific
+        point in time:
+
+        Long oneHourEarlier = Instant.now().atZone(ZoneId.systemDefault()).minusHours(1).toEpochSecond();
+
+        Map<TopicPartition, Long> partitionTimestampMap = consumer.assignment()
+            .stream()
+            .collect(Collectors.toMap(tp -> tp, tp -> oneHourEarlier));
+
+        Map<TopicPartition, OffsetAndTimestamp> offsetMap = consumer.offsetsForTimes(partitionTimestampMap);
+
+        for(Map.Entry<TopicPartition,OffsetAndTimestamp> entry: offsetMap.entrySet()) {
+            consumer.seek(entry.getKey(), entry.getValue().offset());
+        }
+
+
+
+- But How Do We Exit?
+
+    - When you decide to shut down the consumer, and you want to exit immediately even though the 
+        consumer may be waiting on a longer poll(), you need another thread to call 'consumer.wakeup()'.
+        If you are running the consumer loop in the main thread, this can be done from the 'ShutdownHook'.
+
+
+    - Note that 'consumer.wakeup()' is the only consumer method that is safe to call from a different
+        thread.  Calling 'wakeup()' will cause 'poll()' to exit with 'WakeupException'.
+
+
+    - The 'WakeupException' doesn't need to be handled, but before exiting the thread, you must call
+        'consumer.close()', which will commit offsets if needed and send a message to the GroupCoordinator
+        that the consumer is leaving the group.
+
+
+    - This is a truncated example:
+
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            public void run() {
+                System.out.println("Starting exit...");
+                consumer.wakeup();
+                try {
+                    mainThread.join();
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+
+        Duration timeout = Duration.ofMillis(10000);
+
+        try {
+            // looping until ctrl-c, the shutdown hook will cleanup on exit
+            while (true) {
+                ConsumerRecords<String, String> records = movingAvg.consumer.poll(timeout);
+                System.out.println(System.currentTimeMillis() + "-- waiting for data...");
+
+                for (ConsumerRecord<String, String> record : records) {
+                    System.out.printf("offset = %d, key = %s, value = %s\n",
+                        record.offset(), record.key(), record.value());
+                }
+
+                for (TopicPartition tp: consumer.assignment())
+                    System.out.println("Committing offset at position:" + consumer.position(tp));
+
+                movingAvg.consumer.commitSync();
+            }
+        } catch (WakeupException e) {
+            // ignore for shutdown
+        } finally {
+            consumer.close();
+            System.out.println("Closed consumer and we are done");
+        }
+
+
+
+- Deserializers
+
+    - Deserializers are required to convert byte arrays received from Kafka into PL objects.  For instance,
+        we can use the simple 'StringDeserializer' to deserialize strings.
+
+
+    - Obviously, the serializer used to produce events must match the deserializer used to consume them.
+        This means that developers must keep track of which serializers were used to write, and must
+        ensure that each topic only contains messages your deserializers can interpret.
+
+
+    - This is one of the benefits of using Avro and the Schema Registry for serializing and deserializing.
+        The 'AvroSerializer' can make sure that all the data written to a specific topic is compatible
+        with the schema of the topic, which means it can be deserialized.  Any errors will be caught
+        on the Producer side.
+
+
+    - We can write a custom deserializer for our 'Customer' class similarly to how we wrote the serializer.
+        Again, this is error-prone and not recommended.  A better solution is to use a well-known
+        standard message format.
+
+
+
+- Using Avro Deserialization with Kafka Consumer
+
+    - To read the 'Customer' class that was described previously:
+
+        Duration timeout = Duration.ofMillis(100);
+
+        Properties props = new Properties();
+        props.put("bootstrap.servers", "broker1:9092,broker2:9092");
+        props.put("group.id", "CountryCounter");
+        props.put("key.deserializer", "org.apache.kafka.common.serialization.StringDeserializer");
+        props.put("value.deserializer", "io.confluent.kafka.serializers.KafkaAvroDeserializer");
+        props.put("specific.avro.reader","true");
+        props.put("schema.registry.url", schemaUrl);
+
+        String topic = "customerContacts";
+        KafkaConsumer<String, Customer> consumer = new KafkaConsumer<>(props);
+        consumer.subscribe(Collections.singletonList(topic));
+
+        System.out.println("Reading topic:" + topic);
+
+        while (true) {
+            ConsumerRecords<String, Customer> records = consumer.poll(timeout);
+
+            for (ConsumerRecord<String, Customer> record: records) {
+                System.out.println("Current customer name is: " + record.value().getName());
+            }
+
+            consumer.commitSync();
+        }
+
+
+
+- Standalone Consumer: Why and How to Use a Consumer Without a Group
+
+    - Sometimes, you just need a single consumer to read all the data in a topic, and you don't need a
+        group.  In this case, you can just add a consumer and specify which partitions you want to read.
+
+
+    - Here, a consumer can assign itself all partitions of a specific topic and consume from them.
+
+        Duration timeout = Duration.ofMillis(100);
+
+        List<PartitionInfo> partitionInfos = null;
+        partitionInfos = consumer.partitionsFor("topic");
+
+        if (partitionInfos != null) {
+            for (PartitionInfo partition : partitionInfos)
+                partitions.add(new TopicPartition(partition.topic(), partition.partition()));
+
+            consumer.assign(partitions);
+
+            while (true) {
+                ConsumerRecords<String, String> records = consumer.poll(timeout);
+
+                for (ConsumerRecord<String, String> record: records) {
+                    System.out.printf("topic = %s, partition = %s, offset = %d,
+                        customer = %s, country = %s\n",
+                        record.topic(), 
+                        record.partition(), 
+                        record.offset(),
+                        record.key(), 
+                        record.value());
+                }
+
+                consumer.commitSync();
+            }
+        }
