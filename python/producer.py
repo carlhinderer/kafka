@@ -1,6 +1,7 @@
 from confluent_kafka import Producer
 
 import socket
+import time
 
 
 def build_producer():
@@ -29,10 +30,17 @@ def send_asynchronously(producer, topic, value):
     producer.poll(1)  # Get delivery notification events, which triggers callbacks
 
 
-if __name__ == '__main__':
+def send_test_messages():
     p = build_producer()
     topic = 'test'
-    message = 'Hello, World'
+    counter = 1
 
-    # send_synchronously(p, topic, message)
-    send_asynchronously(p, topic, message)
+    while True:
+        message = str(counter)
+        send_asynchronously(p, topic, message)
+        counter += 1
+        time.sleep(1)
+
+
+if __name__ == '__main__':
+    send_test_messages()

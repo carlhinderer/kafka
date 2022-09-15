@@ -236,8 +236,8 @@
 
 
     - Note that the 'acks' is a tradeoff for Producer latency, not end-to-end latency.  In order to
-        maintain consistency, Kafka will not allow consumers to read records until all in-sync
-        replicas.  So the end-to-end latency is the same whether 'acks' is 0, 1, or 'all'.
+        maintain consistency, Kafka will not allow consumers to read records until they are written to
+        all in-sync replicas.  So the end-to-end latency is the same whether 'acks' is 0, 1, or 'all'.
 
 
 
@@ -332,7 +332,202 @@
 
 
 
-- Serializers
+- Custom Serializers
+
+    - Kafka has several built-in serializers, including for Strings, integers, and ByteArrays.
+        However, eventually you will want to serialize more complex objects.
+
+
+    - When you want to send an object that isn't a simple string or integer, you can either use a
+        serialization library (ie Avro, Thrift, Protobuf) or create a custom serialization.
+
+
+    - Suppose that instead of just recording the customer name, you want to create a class to
+        represent customers:
+
+        public class Customer {
+            private int customerID;
+            private String customerName;
+
+            public Customer(int ID, String name) {
+                this.customerID = ID;
+                this.customerName = name;
+            }
+
+            public int getID() {
+                return customerID;
+            }
+
+            public String getName() {
+                return customerName;
+            }
+        }
+
+
+    - Now, we can create a custom serializer for the class:
+
+        import org.apache.kafka.common.errors.SerializationException;
+
+        import java.nio.ByteBuffer;
+        import java.util.Map;
+
+        public class CustomerSerializer implements Serializer<Customer> {
+
+            @Override
+            public void configure(Map configs, boolean isKey) {
+                // nothing to configure
+            }
+
+            @Override
+            /**
+            We are serializing Customer as:
+            4 byte int representing customerId
+            4 byte int representing length of customerName in UTF-8 bytes (0 if name is Null)
+            N bytes representing customerName in UTF-8
+            **/
+            public byte[] serialize(String topic, Customer data) {
+                try {
+                    byte[] serializedName;
+                    int stringSize;
+                    if (data == null)
+                        return null;
+                    else {
+                        if (data.getName() != null) {
+                            serializedName = data.getName().getBytes("UTF-8");
+                            stringSize = serializedName.length;
+                        } else {
+                            serializedName = new byte[0];
+                            stringSize = 0;
+                        }
+                    }
+
+                    ByteBuffer buffer = ByteBuffer.allocate(4 + 4 + stringSize);
+                    buffer.putInt(data.getID());
+                    buffer.putInt(stringSize);
+                    buffer.put(serializedName);
+
+                    return buffer.array();
+                } catch (Exception e) {
+                    throw new SerializationException("Error when serializing Customer to byte[] " + e);
+                }
+            }
+
+            @Override
+            public void close() {
+                // nothing to close
+            }
+        }
+
+
+    - There are lots of reasons to not actually implement the serialization yourself.  The code is
+        brittle, versioning will be nearly impossible, and debugging is challenging.  We should use a
+        common library such as JSON, Avro, Thrift, Protobuf instead.
+
+
+
+- Serializing Using Apache Avro
+
+    - Avro was created by Doug Cutting as a way to share large data files with a large audience.
+
+        - The schema is usually described in JSON
+        - Serialization is usually to binary files, although serialization to JSON is also supported
+        - Avro assumes the schema is present when reading and writing files, usually embedded in files
+
+
+    - When the application that is writing messages switches to a new but compatbile schema, the readers
+        can continue processing messages without requiring any updates.
+
+
+    - Suppose the original schema was:
+
+        {
+            "namespace": "customerManagement.avro",
+             "type": "record",
+             "name": "Customer",
+             "fields": [
+                 {"name": "id", "type": "int"},
+                 {"name": "name", "type": "string"},
+                 {"name": "faxNumber", "type": ["null", "string"], "default": "null"}
+             ]
+        }
+
+      The 'id' and 'name' fields are mandatory, while 'faxNumber' is optional and defaults to null.
+
+
+    - Now, we'll update our schema, deciding that a fax number is no longer necessary and including an
+        email field instead:
+
+
+        {
+            "namespace": "customerManagement.avro",
+            "type": "record",
+            "name": "Customer",
+            "fields": [
+                {"name": "id", "type": "int"},
+                {"name": "name", "type": "string"},
+                {"name": "email", "type": ["null", "string"], "default": "null"}
+            ]
+        }
+
+
+    - When the reading application encounters a message using the new schema, 'getFaxNumber()' will 
+        return null since it is not present.
+
+      When the reading application encounters a message using the old schema, 'getEmail()' will return
+        null since it is not present.
+
+
+    - Note that there are compatability rules that must be followed for schemas to be compatible.  For
+        backwards compatability, you can delete fields or add optional fields.  For forward compatability,
+        you can add fields or delete optional fields.
+
+      Thus, for full backwards and forwards compatibility, you can evolve schemas by:
+
+        1. Adding optional fields
+        2. Deleting optional fields
+
+
+    - Optional fields have a default value if one is not provided.  They are often union types with null
+        and a default value of null.
+
+
+
+- Using Avro Records with Kafka
+
+    - Unlike Avro files, where storing the entire schema with the file adds a reasonable amount of
+        overhead, storing the schema with each record will usually more than double the record size.
+
+
+    - To alleviate this, we use a Schema Registry.  In this case, we'll use Confluent Schema Registry.
+        We store all the schemas used to write data into the registry.  Then, we add the id of the
+        schema into the record when we produce to Kafka.
+
+
+    - The consumers can then use the id to pull the record out of the Schema Registry and deserialize
+        the data.  All this work is done in the serializers and deserializers, we shouldn't need to
+        code for this.
+
+
+    - This is an example of producing Avro objects to Kafka:
+
+        Properties props = new Properties();
+        props.put("bootstrap.servers", "localhost:9092");
+        props.put("key.serializer", "io.confluent.kafka.serializers.KafkaAvroSerializer");
+        props.put("value.serializer", "io.confluent.kafka.serializers.KafkaAvroSerializer");
+        props.put("schema.registry.url", schemaUrl);
+
+        String topic = "customerContacts";
+
+        Producer<String, Customer> producer = new KafkaProducer<>(props);
+
+        // We keep producing new events until someone ctrl-c
+        while (true) {
+            Customer customer = CustomerGenerator.getNext();
+            System.out.println("Generated customer " + customer.toString());
+            ProducerRecord<String, Customer> record = 
+                new ProducerRecord<>(topic, customer.getName(), customer);
+            producer.send(record);
+
 
 
 - Partitions

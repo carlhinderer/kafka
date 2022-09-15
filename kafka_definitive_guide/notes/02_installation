@@ -129,7 +129,7 @@
 - How to Choose the Number of Partitions
 
     - We should think about the average and maximum throughputs you expect to achieve for a topic.
-        Consumers are typically the bottleneck, as producers are 
+        Consumers are typically the bottleneck, as producers are typically much faster than consumers.
 
 
     - A partition can only be read by a single consumer.  We should also think about the average and
