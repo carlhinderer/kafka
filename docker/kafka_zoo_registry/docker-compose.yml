@@ -7,6 +7,10 @@ services:
       - "2181:2181"
     environment:
       - ALLOW_ANONYMOUS_LOGIN=yes
+    deploy:
+      resources:
+        limits:
+          memory: 200M
 
   kafka:
     image: docker.io/bitnami/kafka:latest
@@ -14,13 +18,18 @@ services:
       - "9092:9092"
     environment:
       - ALLOW_PLAINTEXT_LISTENER=yes
-      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
-      - KAFKA_CFG_LISTENERS=CLIENT://:9093,EXTERNAL://:9092
-      - KAFKA_CFG_ADVERTISED_LISTENERS=CLIENT://kafka:9093,EXTERNAL://localhost:9092
-      - KAFKA_CFG_INTER_BROKER_LISTENER_NAME=CLIENT
-      - KAFKA_CFG_ZOOKEEPER_CONNECT=zookeeper:2181
+      - KAFKA_BROKER_ID=1
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CLIENT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      - KAFKA_LISTENERS=CLIENT://:9093,EXTERNAL://:9092
+      - KAFKA_ADVERTISED_LISTENERS=CLIENT://kafka:9093,EXTERNAL://localhost:9092
+      - KAFKA_INTER_BROKER_LISTENER_NAME=CLIENT
+      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
     depends_on:
       - zookeeper
+    deploy:
+      resources:
+        limits:
+          memory: 200M
 
   schema-registry:
     image: confluentinc/cp-schema-registry:5.5.3
@@ -33,3 +42,7 @@ services:
     depends_on:
       - zookeeper
       - kafka
+    deploy:
+      resources:
+        limits:
+          memory: 200M
