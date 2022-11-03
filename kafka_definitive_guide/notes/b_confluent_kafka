@@ -2,4 +2,35 @@
 | B - USING CONFLUENT_KAFKA                                                |
 ----------------------------------------------------------------------------
 
-- 
+- First, we launch Kafka and ZooKeeper with docker-compose.
+
+
+- Next, we add this config file:
+
+    # config.ini
+    ----------------------------
+    [default]
+    bootstrap.servers=localhost:9092
+
+    [consumer]
+    group.id=python_example_group_1
+
+    # 'auto.offset.reset=earliest' to start reading from the beginning of
+    # the topic if no committed offsets exist.
+    auto.offset.reset=earliest
+
+
+- We can create a topic:
+
+    docker compose exec broker \
+        kafka-topics --create \
+        --topic purchases \
+        --bootstrap-server localhost:9092 \
+        --replication-factor 1 \
+        --partitions 1
+
+
+- We add the producer, which is located at 'python/confluent_producer.py'.
+
+
+- We add the consumer, which is located at 'python/confluent_consumer.py'.

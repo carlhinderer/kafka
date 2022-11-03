@@ -1,15 +1,26 @@
-from confluent_kafka import Producer
-
+import os
 import socket
 import time
 
+from configparser import ConfigParser
+
+from confluent_kafka import Producer
+
+
+CONFIG_FILEPATH = 'config.ini'
+TOPIC = 'test'
+
+
+def get_config():
+    config_parser = ConfigParser()
+    config_parser.read(CONFIG_FILEPATH)
+    config = dict(config_parser['default'])
+    config['client.id'] = socket.gethostname()
+    return config
+
 
 def build_producer():
-    config = {
-        'bootstrap.servers': 'localhost:9092',
-        'client.id': socket.gethostname()
-    }
-
+    config = get_config()
     return Producer(config)
 
 
@@ -32,15 +43,14 @@ def send_asynchronously(producer, topic, value):
 
 def send_test_messages():
     p = build_producer()
-    topic = 'test'
     counter = 1
 
     while True:
         message = str(counter)
-        send_asynchronously(p, topic, message)
+        send_asynchronously(p, TOPIC, message)
         counter += 1
         time.sleep(1)
 
 
-if __name__ == '__main__':
+if __name__ == '__main__':    
     send_test_messages()
